@@ -12,6 +12,22 @@ import {
 } from 'framer-motion';
 import { PhotoCarousel } from './photo-carousel';
 
+// ─── Placeholder Avatar ────────────────────────────────────────────────────
+
+function PlaceholderAvatar({ name }: { name: string }) {
+  const initial = (name || '?').charAt(0).toUpperCase();
+  return (
+    <div className="w-full h-full bg-gradient-to-br from-rose-950/50 via-purple-950/30 to-neutral-900 flex items-center justify-center">
+      <div className="text-center space-y-3">
+        <div className="w-24 h-24 rounded-full bg-primary/20 border-2 border-primary/30 flex items-center justify-center mx-auto">
+          <span className="text-4xl font-bold text-primary">{initial}</span>
+        </div>
+        <p className="text-white/60 text-sm font-medium">{name || 'Anonymous'}</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Profile Info Overlay ────────────────────────────────────────────────────
 
 interface ProfileCardInfoProps {
@@ -20,15 +36,18 @@ interface ProfileCardInfoProps {
 }
 
 function ProfileCardInfo({ profile, myInterests = [] }: ProfileCardInfoProps) {
+  // Safe access: ensure interests is always an array
+  const profileInterests = Array.isArray(profile.interests) ? profile.interests : [];
+
   const sharedInterests = useMemo(
-    () => profile.interests.filter((i) => myInterests.includes(i)),
-    [profile.interests, myInterests]
+    () => profileInterests.filter((i: string) => Array.isArray(myInterests) && myInterests.includes(i)),
+    [profileInterests, myInterests]
   );
 
   const compatibilityScore = useMemo(() => {
-    if (myInterests.length === 0) return null;
+    if (!Array.isArray(myInterests) || myInterests.length === 0) return null;
     return Math.round((sharedInterests.length / myInterests.length) * 100);
-  }, [myInterests.length, sharedInterests.length]);
+  }, [myInterests, sharedInterests.length]);
 
   const intentLabel = useMemo(() => {
     const map: Record<string, string> = {
@@ -51,7 +70,7 @@ function ProfileCardInfo({ profile, myInterests = [] }: ProfileCardInfoProps) {
         {/* Name, age, verified */}
         <div className="flex items-center gap-2">
           <h2 className="text-white text-2xl font-bold tracking-tight drop-shadow-lg">
-            {profile.name}, {profile.age}
+            {profile.name || 'Anonymous'}, {profile.age || '?'}
           </h2>
           {profile.isVerified && (
             <BadgeCheck className="w-5 h-5 text-blue-400 fill-blue-400/20" />
@@ -93,9 +112,9 @@ function ProfileCardInfo({ profile, myInterests = [] }: ProfileCardInfoProps) {
         )}
 
         {/* Interests */}
-        {profile.interests.length > 0 && (
+        {profileInterests.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
-            {profile.interests.slice(0, 6).map((interest) => {
+            {profileInterests.slice(0, 6).map((interest: string) => {
               const isShared = sharedInterests.includes(interest);
               return (
                 <span
@@ -111,9 +130,9 @@ function ProfileCardInfo({ profile, myInterests = [] }: ProfileCardInfoProps) {
                 </span>
               );
             })}
-            {profile.interests.length > 6 && (
+            {profileInterests.length > 6 && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-white/5 text-white/40 text-xs">
-                +{profile.interests.length - 6} more
+                +{profileInterests.length - 6} more
               </span>
             )}
           </div>
@@ -199,9 +218,12 @@ export function SwipeCard({
   onSwipe,
   onDragStateChange,
 }: SwipeCardProps) {
-  // Sort photos by order
+  // Sort photos by order — safely handle undefined/null photos
   const sortedPhotos = useMemo(
-    () => [...profile.photos].sort((a, b) => a.order - b.order),
+    () => {
+      const photos = Array.isArray(profile.photos) ? profile.photos : [];
+      return [...photos].sort((a, b) => (a.order || 0) - (b.order || 0));
+    },
     [profile.photos]
   );
 
@@ -209,8 +231,10 @@ export function SwipeCard({
   useEffect(() => {
     if (isTop && sortedPhotos.length > 0) {
       sortedPhotos.forEach((photo) => {
-        const img = new Image();
-        img.src = photo.url;
+        if (photo?.url) {
+          const img = new Image();
+          img.src = photo.url;
+        }
       });
     }
   }, [isTop, sortedPhotos]);
@@ -226,7 +250,11 @@ export function SwipeCard({
     // Second card - visible behind top card with depth effect
     return (
       <div className="absolute inset-0 rounded-2xl overflow-hidden scale-[0.95] translate-y-3 opacity-80">
-        <PhotoCarousel photos={sortedPhotos} />
+        {sortedPhotos.length > 0 ? (
+          <PhotoCarousel photos={sortedPhotos} />
+        ) : (
+          <PlaceholderAvatar name={profile.name} />
+        )}
         <div className="absolute inset-0 bg-black/20" />
       </div>
     );
@@ -312,8 +340,12 @@ function SwipeCardInteractive({
       onDragStart={() => onDragStateChange?.(true)}
       onDragEnd={handleDragEnd}
     >
-      {/* Photos */}
-      <PhotoCarousel photos={sortedPhotos} />
+      {/* Photos or placeholder */}
+      {sortedPhotos.length > 0 ? (
+        <PhotoCarousel photos={sortedPhotos} />
+      ) : (
+        <PlaceholderAvatar name={profile.name} />
+      )}
 
       {/* Swipe feedback overlays */}
       <SwipeFeedbackOverlay x={x} />

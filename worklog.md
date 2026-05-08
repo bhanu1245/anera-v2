@@ -58,3 +58,59 @@ Stage Summary:
 - Onboarding flow: gender → details → interests → main app
 - needsOnboarding flag properly tracks profile completion state
 - All existing systems (discover, matches, chat, notifications) preserved intact
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Debug and fix Discover page swipe card rendering
+
+Work Log:
+- Read all discover components: discover-page, swipe-stack, swipe-card, photo-carousel, action-buttons
+- Tested /api/discover endpoint - returns 19 valid profiles with correct shape
+- Verified profile data types: interests is list, photos is list, all fields present
+- Identified root causes of card rendering failure:
+  1. profile.interests could be undefined → .filter() crash in ProfileCardInfo
+  2. profile.photos could be undefined → spread/sort crash in SwipeCard
+  3. No min-height on card containers → zero-height collapse possible
+  4. No fallback for broken/missing image URLs
+  5. No placeholder avatar when profile has no photos
+  6. React key warnings from using array index in SwipeStack
+  7. useMemo dependency typo in compatibilityScore (yInterests vs myInterests)
+- Fixed swipe-card.tsx:
+  - Added null-safe access for profile.interests (Array.isArray check)
+  - Added null-safe access for profile.photos (Array.isArray check)
+  - Added PlaceholderAvatar component for profiles with no photos
+  - Used PlaceholderAvatar in both second card and interactive top card
+  - Fixed useMemo dependency for compatibilityScore
+- Fixed photo-carousel.tsx:
+  - Added failedImages state tracking with onError handler
+  - Added fallback UI for broken images
+  - Added validation for empty/invalid photo URLs
+  - Added better keys using photo URL suffix instead of array index
+- Fixed swipe-stack.tsx:
+  - Added min-h-[400px] to loading, empty, and card containers
+  - Added proper key props using userId instead of array index
+- Fixed discover-page.tsx:
+  - Added console.log debug logging for profile fetch
+  - Added profile sanitization before storing (ensure all fields have defaults)
+  - Added same sanitization in handleResetSwipes
+  - Added inline style minHeight fallback on card container
+  - Better error logging for seed failures
+- Ran lint - passes clean
+- Tested API endpoint - discover returns valid data
+- Server compiles and renders without errors
+
+Files Modified:
+1. src/components/discover/swipe-card.tsx - Null safety, PlaceholderAvatar, useMemo fix
+2. src/components/discover/photo-carousel.tsx - Error handling, broken image fallback
+3. src/components/discover/swipe-stack.tsx - Min-height, proper keys
+4. src/components/discover/discover-page.tsx - Debug logging, profile sanitization, min-height
+
+Stage Summary:
+- Discover cards now render safely with profiles that have missing/empty photos, interests, or bio
+- Placeholder avatar shows for profiles with no photos
+- Broken image URLs show fallback instead of blank
+- Card containers have min-height to prevent zero-height collapse
+- Profile data is sanitized before storing in discover store
+- Console logging added for debugging discover data flow
+- React key warnings fixed

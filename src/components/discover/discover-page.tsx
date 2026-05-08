@@ -60,7 +60,15 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
     try {
       // Seed bulk demo profiles (idempotent - safe to call once per session)
       if (!seeded) {
-        await apiFetch('/api/seed/bulk', { method: 'POST' }).catch(() => {});
+        try {
+          const seedRes = await apiFetch('/api/seed/bulk', { method: 'POST' });
+          if (seedRes.ok) {
+            const seedData = await seedRes.json();
+            console.log('[Discover] Seeded profiles:', seedData.profiles?.length || 0);
+          }
+        } catch (seedErr) {
+          console.warn('[Discover] Seed failed (non-fatal):', seedErr);
+        }
         setSeeded(true);
       }
 
@@ -69,7 +77,6 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
         signal: abortControllerRef.current.signal,
       });
       if (!res.ok) {
-        // Safely parse error — server might be down and Caddy returns HTML
         let errorMsg = 'Failed to fetch profiles';
         try {
           const contentType = res.headers.get('content-type') || '';
@@ -85,12 +92,31 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
       // Safely parse JSON — server might be down and Caddy returns HTML
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
+        console.warn('[Discover] Non-JSON response from /api/discover');
         setProfiles([]);
         setLoading(false);
         return;
       }
       const data = await res.json();
-      setProfiles(data.profiles || []);
+      const fetchedProfiles = data.profiles || [];
+      console.log('[Discover] Fetched profiles:', fetchedProfiles.length,
+        fetchedProfiles.length > 0 ? `| First: ${fetchedProfiles[0]?.name}, photos: ${fetchedProfiles[0]?.photos?.length || 0}` : '');
+
+      // Validate and sanitize profiles before storing
+      const safeProfiles = fetchedProfiles.map((p: DiscoverProfile) => ({
+        ...p,
+        name: p.name || 'Anonymous',
+        age: p.age || 25,
+        bio: p.bio || '',
+        city: p.city || '',
+        gender: p.gender || 'other',
+        relationshipIntent: p.relationshipIntent || '',
+        interests: Array.isArray(p.interests) ? p.interests : [],
+        photos: Array.isArray(p.photos) ? p.photos : [],
+        isOnboarded: p.isOnboarded ?? true,
+      }));
+
+      setProfiles(safeProfiles);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Failed to load profiles';
@@ -99,6 +125,7 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
         setLoading(false);
         return;
       }
+      console.error('[Discover] Error:', msg);
       setError(msg);
     } finally {
       setLoading(false);
@@ -114,7 +141,7 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
 
   // Set my interests from profile
   useEffect(() => {
-    if (myProfile?.interests) {
+    if (myProfile?.interests && Array.isArray(myProfile.interests)) {
       setMyInterests(myProfile.interests);
     }
   }, [myProfile, setMyInterests]);
@@ -127,12 +154,15 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
     }
   }, [userId, fetchAttempted, seedAndFetch]);
 
-  // Preload next profiles when running low
+  // Debug: log state changes
   useEffect(() => {
-    if (remainingCount() <= 2 && remainingCount() > 0 && !isLoading) {
-      // Could fetch more profiles here
-    }
-  }, [currentProfileIndex, remainingCount, isLoading]);
+    console.log('[Discover] State:', {
+      profilesCount: profiles.length,
+      currentIndex: currentProfileIndex,
+      isLoading,
+      hasCurrent: !!currentProfile(),
+    });
+  }, [profiles.length, currentProfileIndex, isLoading, currentProfile]);
 
   const handleSwipe = useCallback(
     (direction: 'left' | 'right' | 'up') => {
@@ -191,7 +221,7 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
         setIsSwipeAnimating(false);
       }, 350);
     },
-    [isSwipeAnimating, swipe, currentProfile]
+    [isSwipeAnimating, swipe, currentProfile, updateSwipeResult]
   );
 
   const handleNope = useCallback(() => {
@@ -222,7 +252,7 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
       // 1. Reset swipes via API
       const res = await apiFetch('/api/swipe/reset', { method: 'POST' });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to reset swipes');
       }
       // 2. Re-seed (this also resets demo user swipes on the server side)
@@ -230,11 +260,27 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
       // 3. Fetch discover profiles fresh
       const discoverRes = await apiFetch('/api/discover');
       if (!discoverRes.ok) {
-        const data = await discoverRes.json();
+        const data = await discoverRes.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to fetch profiles');
       }
       const data = await discoverRes.json();
-      setProfiles(data.profiles || []);
+      const fetchedProfiles = data.profiles || [];
+
+      // Sanitize profiles
+      const safeProfiles = fetchedProfiles.map((p: DiscoverProfile) => ({
+        ...p,
+        name: p.name || 'Anonymous',
+        age: p.age || 25,
+        bio: p.bio || '',
+        city: p.city || '',
+        gender: p.gender || 'other',
+        relationshipIntent: p.relationshipIntent || '',
+        interests: Array.isArray(p.interests) ? p.interests : [],
+        photos: Array.isArray(p.photos) ? p.photos : [],
+        isOnboarded: p.isOnboarded ?? true,
+      }));
+
+      setProfiles(safeProfiles);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset swipes');
     } finally {
@@ -256,8 +302,8 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Card area */}
-      <div className="flex-1 relative px-3 sm:px-4 pt-2 pb-1 min-h-0">
+      {/* Card area - with min-height fallback */}
+      <div className="flex-1 relative px-3 sm:px-4 pt-2 pb-1 min-h-0" style={{ minHeight: '400px' }}>
         <SwipeStack
           profiles={profiles}
           currentIndex={currentProfileIndex}

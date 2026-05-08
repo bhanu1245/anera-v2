@@ -31,7 +31,7 @@ export function SwipeStack({
 
   if (isLoading) {
     return (
-      <div className="w-full h-full rounded-2xl overflow-hidden bg-neutral-800/50 border border-white/5 flex items-center justify-center">
+      <div className="w-full h-full min-h-[400px] rounded-2xl overflow-hidden bg-neutral-800/50 border border-white/5 flex items-center justify-center">
         <div className="text-center space-y-3">
           <Loader2 className="w-8 h-8 animate-spin mx-auto text-white/40" />
           <p className="text-white/40 text-sm">Finding people near you...</p>
@@ -42,7 +42,7 @@ export function SwipeStack({
 
   if (!hasMore || !currentProfile) {
     return (
-      <div className="w-full h-full rounded-2xl overflow-hidden bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-white/5 flex items-center justify-center">
+      <div className="w-full h-full min-h-[400px] rounded-2xl overflow-hidden bg-gradient-to-br from-neutral-800/80 to-neutral-900/80 border border-white/5 flex items-center justify-center">
         <div className="text-center space-y-4 px-8">
           <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mx-auto">
             <span className="text-4xl">🔍</span>
@@ -71,10 +71,10 @@ export function SwipeStack({
   }
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative w-full h-full min-h-[400px]">
       {/* Third card (barely visible behind second) */}
       {profiles[currentIndex + 2] && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0" key={`card-bg-${profiles[currentIndex + 2].userId}`}>
           <SwipeCard
             profile={profiles[currentIndex + 2]}
             isTop={false}
@@ -87,7 +87,7 @@ export function SwipeStack({
 
       {/* Second card (visible behind top, slightly scaled down) */}
       {profiles[currentIndex + 1] && (
-        <div className="absolute inset-0">
+        <div className="absolute inset-0" key={`card-2-${profiles[currentIndex + 1].userId}`}>
           <SwipeCard
             profile={profiles[currentIndex + 1]}
             isTop={false}
@@ -99,7 +99,7 @@ export function SwipeStack({
       )}
 
       {/* Top card - interactive, draggable */}
-      <div className="absolute inset-0 z-10">
+      <div className="absolute inset-0 z-10" key={`card-top-${currentProfile.userId}`}>
         <SwipeCard
           profile={currentProfile}
           isTop={true}

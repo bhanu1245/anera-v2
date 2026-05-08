@@ -10,6 +10,7 @@ interface PhotoCarouselProps {
 
 export function PhotoCarousel({ photos }: PhotoCarouselProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [failedImages, setFailedImages] = useState<Set<number>>(new Set());
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: false,
     align: 'start',
@@ -37,7 +38,12 @@ export function PhotoCarousel({ photos }: PhotoCarouselProps) {
     emblaApi?.scrollNext();
   }, [emblaApi]);
 
-  if (!photos || photos.length === 0) {
+  const handleImageError = useCallback((index: number) => {
+    setFailedImages(prev => new Set(prev).add(index));
+  }, []);
+
+  // Handle empty or invalid photos
+  if (!photos || !Array.isArray(photos) || photos.length === 0) {
     return (
       <div className="w-full h-full bg-gradient-to-br from-rose-950/50 to-neutral-900 flex items-center justify-center">
         <div className="text-center space-y-2">
@@ -50,20 +56,49 @@ export function PhotoCarousel({ photos }: PhotoCarouselProps) {
     );
   }
 
+  // Filter out photos with empty URLs
+  const validPhotos = photos.filter(p => p && p.url);
+
+  if (validPhotos.length === 0) {
+    return (
+      <div className="w-full h-full bg-gradient-to-br from-rose-950/50 to-neutral-900 flex items-center justify-center">
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto">
+            <span className="text-2xl">📸</span>
+          </div>
+          <p className="text-white/60 text-sm">No photos available</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full h-full select-none">
       {/* Carousel viewport */}
       <div className="overflow-hidden h-full" ref={emblaRef}>
         <div className="flex h-full">
-          {photos.map((photo, index) => (
-            <div key={index} className="flex-none w-full h-full relative">
-              <img
-                src={photo.url}
-                alt={`Photo ${index + 1}`}
-                className="w-full h-full object-cover"
-                loading={index < 2 ? 'eager' : 'lazy'}
-                draggable={false}
-              />
+          {validPhotos.map((photo, index) => (
+            <div key={`photo-${index}-${photo.url?.slice(-20)}`} className="flex-none w-full h-full relative">
+              {failedImages.has(index) ? (
+                // Fallback for broken images
+                <div className="w-full h-full bg-gradient-to-br from-rose-950/50 via-purple-950/30 to-neutral-900 flex items-center justify-center">
+                  <div className="text-center space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mx-auto">
+                      <span className="text-xl">🖼️</span>
+                    </div>
+                    <p className="text-white/40 text-xs">Image unavailable</p>
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={photo.url}
+                  alt={`Photo ${index + 1}`}
+                  className="w-full h-full object-cover"
+                  loading={index < 2 ? 'eager' : 'lazy'}
+                  draggable={false}
+                  onError={() => handleImageError(index)}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -96,7 +131,7 @@ export function PhotoCarousel({ photos }: PhotoCarouselProps) {
           <ChevronLeft className="w-5 h-5 text-white" />
         </button>
       )}
-      {selectedIndex < photos.length - 1 && (
+      {selectedIndex < validPhotos.length - 1 && (
         <button
           onClick={scrollNext}
           className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-200 sm:opacity-60 sm:hover:opacity-100"
@@ -107,11 +142,11 @@ export function PhotoCarousel({ photos }: PhotoCarouselProps) {
       )}
 
       {/* Pagination dots */}
-      {photos.length > 1 && (
+      {validPhotos.length > 1 && (
         <div className="absolute top-3 left-0 right-0 z-20 flex justify-center gap-1.5 px-4">
-          {photos.map((_, index) => (
+          {validPhotos.map((_, index) => (
             <div
-              key={index}
+              key={`dot-${index}`}
               className={`h-1 rounded-full transition-all duration-300 ${
                 index === selectedIndex
                   ? 'w-6 bg-white'
