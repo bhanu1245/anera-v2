@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?  // null for demo/seed users, required for real accounts
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  profile      Profile?
+}
+
+model Profile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  name              String
+  age               Int
+  gender            String   // "male", "female", "non-binary", "other"
+  bio               String   @default("")
+  interests         String   @default("[]") // JSON array stored as string
+  city              String   @default("")
+  relationshipIntent String  @default("") // "casual", "serious", "networking", "friendship", "not-sure"
+  isOnboarded       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos            Photo[]
+
+  @@map("profiles")
+}
+
+model Photo {
+  id        String   @id @default(cuid())
+  profileId String
+  url       String
+  order     Int      @default(0)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("photos")
+}
+
+model Swipe {
+  id         String   @id @default(cuid())
+  fromUserId String   // The user who swiped
+  toUserId   String   // The user being swiped on
+  action     String   // "like", "pass", "superlike"
+  createdAt  DateTime @default(now())
+
+  // Prevent duplicate swipes: one user can only swipe on another once
+  @@unique([fromUserId, toUserId])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([fromUserId, action])
+  @@map("swipes")
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  user1Id   String   // Lower userId alphabetically (for uniqueness)
+  user2Id   String   // Higher userId alphabetically
+  createdAt DateTime @default(now())
+
+  // Prevent duplicate matches
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@map("matches")
+}
+
+// ─── Notification System ────────────────────────────────────────────────────
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String   // Recipient
+  type       String   // "new_match" | "new_message" | "someone_liked" | "superlike_received" | "profile_viewed" | "boost_expired" | "streak_reminder" | "profile_incomplete" | "people_waiting"
+  title      String
+  body       String
+  isRead     Boolean  @default(false)
+  // Related entity (polymorphic)
+  fromUserId String?  // Who triggered this notification (null for system)
+  entityId   String?  // ID of related entity (matchId, messageId, etc.)
+  entityType String?  // "match" | "message" | "profile" | "streak" | "boost"
+  imageUrl   String?  // Avatar/image for the notification
+  createdAt  DateTime @default(now())
+  readAt     DateTime?
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// ─── Push Notification Architecture ─────────────────────────────────────────
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   // FCM device token
+  platform  String   // "ios" | "android" | "web"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@map("device_tokens")
+}
+
+// ─── Messaging System ──────────────────────────────────────────────────────
+
+model Message {
+  id         String   @id @default(cuid())
+  matchId    String   // Which match/chat this belongs to
+  senderId   String   // Who sent the message
+  content    String   // Message text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([matchId, createdAt])
+  @@index([matchId])
+  @@index([senderId])
+  @@map("messages")
+}
+
+// ─── Engagement System ──────────────────────────────────────────────────────
+
+model UserStreak {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  currentStreak Int     @default(0)
+  longestStreak Int     @default(0)
+  lastActiveDate String // ISO date string of last active day (YYYY-MM-DD)
+  updatedAt    DateTime @updatedAt
+
+  @@map("user_streaks")
+}
+
+model EngagementAction {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String   // "swipe" | "match" | "message" | "profile_view" | "login"
+  createdAt  DateTime @default(now())
+
+  @@index([userId, action])
+  @@index([userId, createdAt])
+  @@map("engagement_actions")
+}
