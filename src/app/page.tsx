@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, MessageCircle, User, LogOut, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Sparkles } from 'lucide-react';
+import { Heart, MessageCircle, User, LogOut, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Sparkles, Database } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { useNotificationStore } from '@/stores/notification-store';
@@ -723,6 +723,18 @@ export default function Home() {
         <div className="flex items-center gap-1">
           <StreakBadge compact />
           <NotificationBell />
+          {process.env.NODE_ENV === 'development' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.open('/dev', '_blank')}
+              className="gap-1.5 text-muted-foreground hover:text-primary h-9"
+              title="Dev Panel"
+            >
+              <Database className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">Dev</span>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

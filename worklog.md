@@ -114,3 +114,59 @@ Stage Summary:
 - Profile data is sanitized before storing in discover store
 - Console logging added for debugging discover data flow
 - React key warnings fixed
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Create DEV TEST PANEL for Anera (/dev page)
+
+Work Log:
+- Analyzed codebase architecture: Prisma models, auth system, API routes, stores
+- Created /api/dev API route with production guard (returns 403 in production)
+- Implemented GET /api/dev: returns all users with profile info + aggregate stats
+- Implemented POST /api/dev with 6 action handlers:
+  1. login-as: Creates session token for any user, sets cookie, redirects to /
+  2. reset-database: Deletes ALL data in correct FK order
+  3. seed-demo-profiles: Creates 15 Indian-themed demo profiles with photos
+  4. create-random-match: Creates mutual likes + match for any user
+  5. clear-swipes: Deletes all swipes + matches for a user
+  6. generate-test-messages: Creates realistic conversation in a match
+  7. generate-notifications: Creates 6 varied notification types
+- Created /dev page (src/app/dev/page.tsx) with full DevPanel UI:
+  - Stats dashboard (6 metrics: users, profiles, matches, messages, notifications, swipes)
+  - Quick Actions grid (Reset DB, Seed Profiles, Generate Notifications, Generate Messages)
+  - Registered Users list with per-user Login As / Match / Clear Swipes buttons
+  - Per-User Utilities section with dropdown selectors for messages/notifications/matches/swipes
+  - Test Readiness Indicators with progress bars (minimum/ideal values for each metric)
+  - Danger Zone with double-confirm database reset
+  - Action result toasts for success/error feedback
+  - Production guard (checks API response for 403)
+- Added Dev Panel link in main app header (visible only in development mode)
+- Fixed notifications.ts: Added AbortController timeout (2s) to pushNotificationRealtime to prevent hanging when notification service is down
+- Started notification service on port 3003 for real-time push support
+- Tested all API actions via curl: login-as, create-random-match, generate-test-messages, generate-notifications, clear-swipes
+- Lint passes clean
+
+Files Created:
+1. src/app/api/dev/route.ts - NEW: Dev API with production guard, GET users/stats, POST actions
+2. src/app/dev/page.tsx - NEW: Dev Panel page with full testing UI
+
+Files Modified:
+1. src/app/page.tsx - Added Database icon import, Dev Panel button in header (dev only)
+2. src/lib/notifications.ts - Added 2s AbortController timeout to pushNotificationRealtime
+
+Stage Summary:
+- Complete DEV TEST PANEL created at /dev route
+- All 10 required features implemented:
+  1. /dev page available only in development (production guard)
+  2. Shows all registered users with profile info
+  3. "Login As" button per user (creates session token, redirects to app)
+  4. "Reset Database" button (double-confirm, deletes all data)
+  5. "Seed Demo Profiles" button (creates 15 demo profiles)
+  6. "Create Random Match" utility (per-user or dropdown)
+  7. "Clear Swipes" utility (per-user or dropdown)
+  8. "Generate Test Messages" utility (creates realistic conversation)
+  9. "Generate Notifications" utility (creates 6 notification types)
+  10. Test indicators for matches/messages/notifications counts (plus users/profiles/swipes)
+- Route protected in production via API guard + UI guard
+- Also fixed notification service hanging issue when port 3003 is down

@@ -23,6 +23,10 @@ async function pushNotificationRealtime(
   }
 ): Promise<void> {
   try {
+    // Set a 2-second timeout so we don't hang if the notification service is down
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000);
+
     const response = await fetch('http://localhost:3003/emit?XTransformPort=3003', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -33,7 +37,10 @@ async function pushNotificationRealtime(
           createdAt: new Date().toISOString(),
         },
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       console.warn('[pushNotificationRealtime] Failed to push:', response.status);
