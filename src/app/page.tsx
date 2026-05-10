@@ -5,14 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart, MessageCircle, User, LogOut, Loader2,
   Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft,
-  Sparkles, Database, Flame, Shield,
+  Sparkles, Database, Flame,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useProfileStore } from '@/stores/profile-store';
 import { useNotificationStore } from '@/stores/notification-store';
 import { useDiscoverStore } from '@/stores/discover-store';
 import { useChatStore } from '@/stores/chat-store';
-import { apiFetch, clearStoredToken } from '@/lib/api-client';
+import { apiFetch, clearStoredToken, clearAuthReady } from '@/lib/api-client';
 import { DiscoverPage } from '@/components/discover/discover-page';
 import { ProfileEditor } from '@/components/profile/profile-editor';
 import { NotificationBell } from '@/components/notifications/notification-bell';
@@ -443,6 +443,7 @@ function OnboardingScreen() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
+        requireAuth: true,
       });
 
       if (!res.ok) {
@@ -452,6 +453,7 @@ function OnboardingScreen() {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(formData),
+            requireAuth: true,
           });
           if (!updateRes.ok) throw new Error('Failed to update profile');
         } else {
@@ -698,39 +700,41 @@ function OnboardingScreen() {
 // ─── Reset All Stores on Logout ─────────────────────────────────────────────
 
 function resetAllStores() {
+  console.log('[AUTH] Resetting all stores...');
+
   // Clear stored token from localStorage
   clearStoredToken();
 
-  // Reset discover store
-  const discover = useDiscoverStore.getState();
-  discover.setProfiles([]);
-  discover.setError(null);
-  discover.setHasMore(true);
+  // Clear auth readiness flag in api-client
+  clearAuthReady();
+
+  // Reset discover store (full reset)
+  useDiscoverStore.getState().reset();
 
   // Reset profile store
   useProfileStore.getState().setProfile(null);
 
-  // Reset notification store
-  const notif = useNotificationStore.getState();
-  notif.disconnectSocket();
+  // Disconnect notification socket
+  useNotificationStore.getState().disconnectSocket();
 
   // Reset chat store
   useChatStore.getState().clearMessages();
+
+  console.log('[AUTH] All stores reset');
 }
 
 // ─── Main App Component ─────────────────────────────────────────────────────
 
 export default function Home() {
   const {
-    userId, isAuthenticated, isLoading, needsOnboarding,
+    userId, isAuthenticated, isLoading, needsOnboarding, hasHydrated,
     setAuth, logout, checkSession,
   } = useAuthStore();
   const { fetchProfile, profile, isLoading: isProfileLoading } = useProfileStore();
   const { fetchEngagement, initSocket, disconnectSocket } = useNotificationStore();
 
-  // Auth hydration guard — prevents any rendering until session is verified
-  const [initialized, setInitialized] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  // Single initialization guard — uses hasHydrated from auth-store
+  // instead of maintaining duplicate local state
   const initRef = useRef(false);
 
   const [activeTab, setActiveTab] = useState<AppTab>('discover');
@@ -739,36 +743,27 @@ export default function Home() {
   const [chatMatchId, setChatMatchId] = useState<string | null>(null);
   const [chatProfile, setChatProfile] = useState<ChatProfile | null>(null);
 
-  // ── Auth Initialization (runs once) ────────────────────────────────────────
+  // ── Auth Initialization (runs once on mount) ──────────────────────────────
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
 
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const result = await checkSession();
-        if (!cancelled) {
-          setInitialized(true);
-          setIsInitializing(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setInitialized(true);
-          setIsInitializing(false);
-        }
+    console.log('[AUTH] Initial session check starting...');
+    checkSession().then((result) => {
+      if (result) {
+        console.log('[AUTH] Session restored — userId:', result);
+      } else {
+        console.log('[AUTH] No existing session — showing login');
       }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    });
   }, [checkSession]);
 
   // ── Post-auth initialization (profile, socket, engagement) ─────────────────
+  // This ONLY fires when auth is fully hydrated AND authenticated
   useEffect(() => {
-    if (!userId || !initialized || !isAuthenticated) return;
+    if (!userId || !hasHydrated || !isAuthenticated) return;
+
+    console.log('[AUTH] Post-auth init — fetching profile, socket, engagement');
 
     // Fetch profile
     fetchProfile(userId);
@@ -778,11 +773,11 @@ export default function Home() {
 
     // Fetch engagement data
     fetchEngagement();
-  }, [userId, initialized, isAuthenticated, fetchProfile, initSocket, fetchEngagement]);
+  }, [userId, hasHydrated, isAuthenticated, fetchProfile, initSocket, fetchEngagement]);
 
   // ── Detect if user needs onboarding ────────────────────────────────────────
   const showOnboarding = isAuthenticated && userId && !isProfileLoading && (
-    needsOnboarding || (initialized && profile === null && !isLoading)
+    needsOnboarding || (hasHydrated && profile === null && !isLoading)
   );
 
   // ── Clear needsOnboarding flag once profile is loaded ──────────────────────
@@ -800,9 +795,7 @@ export default function Home() {
     // Then clear auth
     await logout();
 
-    // Reset initialization so next login gets fresh checkSession
-    setInitialized(false);
-    setIsInitializing(true);
+    // Reset init ref so next login gets fresh checkSession
     initRef.current = false;
   }, [logout]);
 
@@ -822,7 +815,9 @@ export default function Home() {
   }, []);
 
   // ── Render: Loading during auth hydration ──────────────────────────────────
-  if (isLoading || !initialized || isInitializing) {
+  // This is the CRITICAL guard: DO NOT render ANY protected content
+  // until hasHydrated is true (i.e., checkSession has completed)
+  if (!hasHydrated || isLoading) {
     return <HydrationLoader />;
   }
 
@@ -837,6 +832,9 @@ export default function Home() {
   }
 
   // ── Render: Authenticated Main App ─────────────────────────────────────────
+  // At this point: hasHydrated=true, isAuthenticated=true, userId exists
+  console.log('[AUTH] Rendering authenticated app — userId:', userId);
+
   const tabs: { id: AppTab; icon: typeof Heart; label: string }[] = [
     { id: 'discover', icon: Heart, label: 'Discover' },
     { id: 'matches', icon: MessageCircle, label: 'Matches' },

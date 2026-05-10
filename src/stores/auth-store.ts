@@ -4,6 +4,8 @@ import {
   setStoredToken,
   clearStoredToken,
   onUnauthorized,
+  markAuthReady,
+  clearAuthReady,
 } from '@/lib/api-client';
 
 interface AuthState {
@@ -67,11 +69,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       hasHydrated: false,
       isCheckingSession: false,
     });
+    clearAuthReady();
   },
 
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
     try {
+      console.log('[AUTH] Login attempt:', email);
+
       const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -99,22 +104,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       const data = await res.json();
-      set({
-        userId: data.userId,
-        isAuthenticated: true,
-        isLoading: false,
-        needsOnboarding: data.needsOnboarding || false,
-        error: null,
-        hasHydrated: true,
-      });
 
+      // Store token FIRST — this is critical for subsequent API calls
       if (data.token) {
         setStoredToken(data.token);
       }
 
-      return data.userId;
+      // Verify session is actually established by calling checkSession
+      console.log('[AUTH] Login response received, verifying session...');
+      const verifiedUserId = await get().checkSession();
+
+      if (verifiedUserId) {
+        console.log('[AUTH] Session verified after login, userId:', verifiedUserId);
+        // Mark auth as ready so protected API calls can proceed
+        markAuthReady();
+        // Return the userId — page.tsx will use this to redirect
+        return verifiedUserId;
+      } else {
+        // Session verification failed — but login succeeded, use login data
+        console.warn('[AUTH] Session verification failed after login, using login data');
+        set({
+          userId: data.userId,
+          isAuthenticated: true,
+          isLoading: false,
+          needsOnboarding: data.needsOnboarding || false,
+          error: null,
+          hasHydrated: true,
+        });
+        markAuthReady();
+        return data.userId;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed';
+      console.error('[AUTH] Login failed:', msg);
       if (msg.includes('Unexpected token') || msg.includes('is not valid JSON')) {
         set({
           error: 'Unable to connect to server. Please refresh the page.',
@@ -137,6 +159,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (email: string, password: string, name: string) => {
     set({ isLoading: true, error: null });
     try {
+      console.log('[AUTH] Register attempt:', email);
+
       const res = await apiFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,22 +188,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       const data = await res.json();
-      set({
-        userId: data.userId,
-        isAuthenticated: true,
-        isLoading: false,
-        needsOnboarding: data.needsOnboarding || true,
-        error: null,
-        hasHydrated: true,
-      });
 
+      // Store token FIRST
       if (data.token) {
         setStoredToken(data.token);
       }
 
-      return data.userId;
+      // Verify session
+      console.log('[AUTH] Register response received, verifying session...');
+      const verifiedUserId = await get().checkSession();
+
+      if (verifiedUserId) {
+        console.log('[AUTH] Session verified after register, userId:', verifiedUserId);
+        markAuthReady();
+        return verifiedUserId;
+      } else {
+        console.warn('[AUTH] Session verification failed after register, using register data');
+        set({
+          userId: data.userId,
+          isAuthenticated: true,
+          isLoading: false,
+          needsOnboarding: data.needsOnboarding || true,
+          error: null,
+          hasHydrated: true,
+        });
+        markAuthReady();
+        return data.userId;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Registration failed';
+      console.error('[AUTH] Register failed:', msg);
       if (msg.includes('Unexpected token') || msg.includes('is not valid JSON')) {
         set({
           error: 'Unable to connect to server. Please refresh the page.',
@@ -202,6 +240,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loginDemo: async () => {
     set({ isLoading: true, error: null });
     try {
+      console.log('[AUTH] Demo login attempt');
+
       const res = await apiFetch('/api/auth/demo-login', {
         method: 'POST',
         skipAuthRefresh: true,
@@ -224,22 +264,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw new Error('Server returned an unexpected response. Please try again.');
       }
       const data = await res.json();
-      set({
-        userId: data.userId,
-        isAuthenticated: true,
-        isLoading: false,
-        needsOnboarding: false,
-        error: null,
-        hasHydrated: true,
-      });
 
+      // Store token FIRST
       if (data.token) {
         setStoredToken(data.token);
       }
 
-      return data.userId;
+      // Verify session
+      console.log('[AUTH] Demo login response received, verifying session...');
+      const verifiedUserId = await get().checkSession();
+
+      if (verifiedUserId) {
+        console.log('[AUTH] Session verified after demo login, userId:', verifiedUserId);
+        markAuthReady();
+        return verifiedUserId;
+      } else {
+        console.warn('[AUTH] Session verification failed after demo login, using login data');
+        set({
+          userId: data.userId,
+          isAuthenticated: true,
+          isLoading: false,
+          needsOnboarding: false,
+          error: null,
+          hasHydrated: true,
+        });
+        markAuthReady();
+        return data.userId;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Login failed';
+      console.error('[AUTH] Demo login failed:', msg);
       if (msg.includes('Unexpected token') || msg.includes('is not valid JSON')) {
         set({
           error: 'Unable to connect to server. Please refresh the page.',
@@ -260,6 +314,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    console.log('[AUTH] Logging out...');
     try {
       await apiFetch('/api/auth/logout', {
         method: 'POST',
@@ -269,6 +324,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Ignore logout errors
     }
     clearStoredToken();
+    clearAuthReady();
     set({
       userId: null,
       isAuthenticated: false,
@@ -278,11 +334,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       hasHydrated: false,
       isCheckingSession: false,
     });
+    console.log('[AUTH] Logout complete — auth state cleared');
   },
 
   checkSession: async () => {
     // Prevent concurrent session checks
-    if (get().isCheckingSession) return null;
+    if (get().isCheckingSession) {
+      console.log('[AUTH] Session check already in progress, skipping');
+      return null;
+    }
 
     set({ isLoading: true, isCheckingSession: true });
     try {
@@ -290,6 +350,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         skipAuthRefresh: true,
       });
       if (!res.ok) {
+        console.log('[AUTH] Session check failed — not authenticated');
         set({
           isAuthenticated: false,
           userId: null,
@@ -301,6 +362,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
+        console.log('[AUTH] Session check — non-JSON response');
         set({
           isAuthenticated: false,
           userId: null,
@@ -312,6 +374,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       const data = await res.json();
       if (data.authenticated && data.userId) {
+        console.log('[AUTH] Session restored — userId:', data.userId);
         set({
           userId: data.userId,
           isAuthenticated: true,
@@ -321,12 +384,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isCheckingSession: false,
         });
 
+        // Refresh the stored token so subsequent API calls have it
         if (data.token) {
           setStoredToken(data.token);
         }
 
+        // Mark auth as ready for protected API calls
+        markAuthReady();
+
         return data.userId;
       } else {
+        console.log('[AUTH] Session check — not authenticated');
         set({
           userId: null,
           isAuthenticated: false,
@@ -336,7 +404,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
         return null;
       }
-    } catch {
+    } catch (err) {
+      console.error('[AUTH] Session check error:', err);
       set({
         userId: null,
         isAuthenticated: false,
@@ -351,5 +420,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
 // Register the global 401 handler
 onUnauthorized(() => {
+  console.log('[AUTH] 401 received — clearing auth state');
   useAuthStore.getState().setAuth(null);
+  clearAuthReady();
 });

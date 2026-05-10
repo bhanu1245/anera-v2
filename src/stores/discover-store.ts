@@ -40,6 +40,9 @@ interface DiscoverState {
   setLatestMatch: (match: Match | null) => void;
   setShowMatchAnimation: (show: boolean) => void;
 
+  // Reset for logout/login cycle
+  reset: () => void;
+
   // Computed
   currentProfile: () => DiscoverProfile | null;
   nextProfile: () => DiscoverProfile | null;
@@ -144,6 +147,21 @@ export const useDiscoverStore = create<DiscoverState>((set, get) => ({
 
   setLatestMatch: (latestMatch) => set({ latestMatch }),
   setShowMatchAnimation: (showMatchAnimation) => set({ showMatchAnimation }),
+
+  /** Full reset — used during logout to ensure clean slate for next login */
+  reset: () => {
+    set({
+      profiles: [],
+      currentProfileIndex: 0,
+      isLoading: false,
+      error: null,
+      hasMore: true,
+      swipeHistory: [],
+      latestMatch: null,
+      showMatchAnimation: false,
+      myInterests: [],
+    });
+  },
 
   currentProfile: () => {
     const state = get();

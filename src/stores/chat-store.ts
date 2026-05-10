@@ -52,7 +52,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const params = new URLSearchParams({ matchId });
       if (cursor) params.set('cursor', cursor);
 
-      const res = await apiFetch(`/api/messages?${params.toString()}`);
+      const res = await apiFetch(`/api/messages?${params.toString()}`, { requireAuth: true });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to fetch messages');
@@ -77,7 +77,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   prependOlderMessages: async (matchId: string, cursor: string) => {
     try {
       const params = new URLSearchParams({ matchId, cursor });
-      const res = await apiFetch(`/api/messages?${params.toString()}`);
+      const res = await apiFetch(`/api/messages?${params.toString()}`, { requireAuth: true });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to fetch messages');
@@ -106,6 +106,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matchId, content }),
+        requireAuth: true,
       });
 
       if (!res.ok) {

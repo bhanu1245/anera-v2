@@ -11,6 +11,7 @@
  *    fallback when cookies are unavailable (e.g., cross-origin HTTP sandbox)
  * 3. 401 responses trigger global auth-state refresh via the auth store
  * 4. Error handling is standardized across the entire app
+ * 5. Auth-readiness guard prevents API calls before the session is established
  */
 
 // ─── Token Storage ──────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ const TOKEN_KEY = 'anera_session_token';
 export function setStoredToken(token: string): void {
   try {
     localStorage.setItem(TOKEN_KEY, token);
+    console.log('[API] Token stored in localStorage');
   } catch {
     // localStorage unavailable (SSR, private browsing)
   }
@@ -39,9 +41,71 @@ export function getStoredToken(): string | null {
 export function clearStoredToken(): void {
   try {
     localStorage.removeItem(TOKEN_KEY);
+    console.log('[API] Token cleared from localStorage');
   } catch {
     // Ignore
   }
+}
+
+// ─── Auth Readiness Guard ───────────────────────────────────────────────────
+//
+// Prevents protected API calls from firing before the auth token is available.
+// The auth store calls markAuthReady() after successful login/register/checkSession.
+// This is the KEY fix for the "Authentication required" bug after logout→login.
+
+let authReady = false;
+let authReadyResolve: (() => void) | null = null;
+let authReadyPromise: Promise<void> = new Promise((resolve) => {
+  authReadyResolve = resolve;
+});
+
+/**
+ * Mark auth as ready — called by auth-store after:
+ * - Successful login/register/demo-login (token is in localStorage)
+ * - Successful checkSession (token is refreshed in localStorage)
+ * The discover page and other protected fetches will wait for this.
+ */
+export function markAuthReady(): void {
+  authReady = true;
+  console.log('[API] Auth marked as ready — protected API calls can proceed');
+  authReadyResolve?.();
+  // Reset for next cycle (logout will call clearAuthReady)
+  authReadyPromise = new Promise((resolve) => {
+    authReadyResolve = resolve;
+  });
+}
+
+/**
+ * Clear auth readiness — called during logout.
+ * Ensures that after logout, no protected API calls can proceed.
+ */
+export function clearAuthReady(): void {
+  authReady = false;
+  console.log('[API] Auth readiness cleared — protected API calls blocked');
+  authReadyPromise = new Promise((resolve) => {
+    authReadyResolve = resolve;
+  });
+}
+
+/**
+ * Check if auth is ready for protected API calls.
+ */
+export function isAuthReady(): boolean {
+  return authReady;
+}
+
+/**
+ * Wait for auth to be ready. Returns immediately if already ready.
+ * Used by apiFetch when `requireAuth: true` is set.
+ */
+export async function waitForAuth(timeoutMs = 5000): Promise<boolean> {
+  if (authReady) return true;
+
+  console.log('[API] Waiting for auth readiness...');
+  const timeout = new Promise<boolean>((resolve) =>
+    setTimeout(() => resolve(false), timeoutMs)
+  );
+  return Promise.race([authReadyPromise.then(() => true), timeout]);
 }
 
 // ─── 401 Handler ────────────────────────────────────────────────────────────
@@ -61,6 +125,13 @@ export function onUnauthorized(callback: () => void): void {
 export interface ApiFetchOptions extends Omit<RequestInit, 'credentials'> {
   /** If true, don't trigger the global 401 handler (used by auth calls themselves) */
   skipAuthRefresh?: boolean;
+  /**
+   * If true, wait for auth readiness before making the request.
+   * Prevents "Authentication required" errors by ensuring the token
+   * is available in localStorage before the fetch fires.
+   * Default: false (backward compatible)
+   */
+  requireAuth?: boolean;
 }
 
 /**
@@ -68,13 +139,25 @@ export interface ApiFetchOptions extends Omit<RequestInit, 'credentials'> {
  * - Includes `credentials: 'include'` for cookie-based auth
  * - Adds `Authorization: Bearer <token>` header as fallback
  * - Handles 401 responses globally (triggers auth store refresh)
+ * - Optionally waits for auth readiness before firing (requireAuth: true)
  * - Provides consistent error handling
  */
 export async function apiFetch(
   url: string,
   options: ApiFetchOptions = {}
 ): Promise<Response> {
-  const { skipAuthRefresh, headers: customHeaders, ...rest } = options;
+  const { skipAuthRefresh, requireAuth, headers: customHeaders, ...rest } = options;
+
+  // If this is a protected API call and auth isn't ready yet, wait
+  if (requireAuth && !authReady) {
+    console.log(`[API] Blocked: ${url} — auth not ready, waiting...`);
+    const ready = await waitForAuth();
+    if (!ready) {
+      console.warn(`[API] Auth readiness timeout for ${url} — proceeding anyway`);
+    } else {
+      console.log(`[API] Auth ready — proceeding with ${url}`);
+    }
+  }
 
   // Build headers: merge custom headers with Authorization
   const headers = new Headers(customHeaders);
@@ -96,7 +179,9 @@ export async function apiFetch(
 
   // Handle 401 globally: clear token and notify auth store
   if (response.status === 401 && !skipAuthRefresh) {
+    console.warn(`[API] 401 Unauthorized for ${url} — clearing token`);
     clearStoredToken();
+    clearAuthReady();
     onUnauthorizedCallback?.();
   }
 

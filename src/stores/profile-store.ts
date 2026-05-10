@@ -108,7 +108,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       // ✅ GET is allowed with userId param (public profile view)
-      const res = await apiFetch(`/api/profile?userId=${userId}`);
+      const res = await apiFetch(`/api/profile?userId=${userId}`, { requireAuth: true });
       if (!res.ok) {
         // Safely parse error — server might be down and Caddy returns HTML
         let errorMsg = 'Failed to fetch profile';
@@ -122,7 +122,9 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
           // Ignore JSON parse errors
         }
         if (res.status === 401) {
-          throw new Error('Please log in to view your profile.');
+          // Don't throw — just silently fail. The auth store will handle redirect.
+          set({ isLoading: false });
+          return;
         }
         throw new Error(errorMsg);
       }

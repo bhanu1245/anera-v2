@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useDiscoverStore } from '@/stores/discover-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { useProfileStore } from '@/stores/profile-store';
-import { apiFetch } from '@/lib/api-client';
+import { apiFetch, isAuthReady } from '@/lib/api-client';
 import { SwipeStack } from './swipe-stack';
 import { ActionButtons } from './action-buttons';
 import { MatchAnimation } from './match-animation';
@@ -39,19 +39,45 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
     remainingCount,
   } = useDiscoverStore();
 
-  const { userId } = useAuthStore();
+  const { userId, isAuthenticated, hasHydrated } = useAuthStore();
   const { profile: myProfile, fetchProfile } = useProfileStore();
   const [isDragging, setIsDragging] = useState(false);
   const [isSwipeAnimating, setIsSwipeAnimating] = useState(false);
-  const [fetchAttempted, setFetchAttempted] = useState(false);
-  const [seeded, setSeeded] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Track the userId that was used for the current fetch cycle.
+  // When userId changes (logout→login), we reset fetchAttempted
+  // so discover re-fetches for the new user.
+  const lastFetchedUserId = useRef<string | null>(null);
+  const [fetchAttempted, setFetchAttempted] = useState(false);
+  const [seeded, setSeeded] = useState(false);
+
+  // Reset fetch state when userId changes (e.g. after re-login)
+  useEffect(() => {
+    if (userId !== lastFetchedUserId.current) {
+      console.log('[DISCOVER] userId changed:', lastFetchedUserId.current, '→', userId, '— resetting fetch state');
+      lastFetchedUserId.current = userId;
+      setFetchAttempted(false);
+      setSeeded(false);
+    }
+  }, [userId]);
+
   // Seed demo profiles if needed, then fetch
   const seedAndFetch = useCallback(async () => {
-    if (!userId) return;
+    // AUTH GUARD: Never fetch if not authenticated and hydrated
+    if (!userId || !isAuthenticated || !hasHydrated) {
+      console.log('[DISCOVER] Blocked — auth not ready', { userId, isAuthenticated, hasHydrated });
+      return;
+    }
 
+    // Double-check auth readiness from api-client
+    if (!isAuthReady()) {
+      console.log('[DISCOVER] Blocked — api-client auth not ready');
+      return;
+    }
+
+    console.log('[DISCOVER] Fetching profiles for user:', userId);
     setLoading(true);
     setError(null);
     abortControllerRef.current?.abort();
@@ -61,7 +87,10 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
       // Seed bulk demo profiles (idempotent - safe to call once per session)
       if (!seeded) {
         try {
-          const seedRes = await apiFetch('/api/seed/bulk', { method: 'POST' });
+          const seedRes = await apiFetch('/api/seed/bulk', {
+            method: 'POST',
+            requireAuth: true,
+          });
           if (seedRes.ok) {
             const seedData = await seedRes.json();
             console.log('[Discover] Seeded profiles:', seedData.profiles?.length || 0);
@@ -75,6 +104,7 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
       // Then fetch discover profiles
       const res = await apiFetch('/api/discover', {
         signal: abortControllerRef.current.signal,
+        requireAuth: true,
       });
       if (!res.ok) {
         let errorMsg = 'Failed to fetch profiles';
@@ -130,14 +160,14 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [userId, seeded, setProfiles, setLoading, setError]);
+  }, [userId, isAuthenticated, hasHydrated, seeded, setProfiles, setLoading, setError]);
 
   // Load my profile for compatibility + interests
   useEffect(() => {
-    if (userId && !myProfile) {
+    if (userId && isAuthenticated && hasHydrated && !myProfile) {
       fetchProfile(userId);
     }
-  }, [userId, myProfile, fetchProfile]);
+  }, [userId, isAuthenticated, hasHydrated, myProfile, fetchProfile]);
 
   // Set my interests from profile
   useEffect(() => {
@@ -146,23 +176,16 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
     }
   }, [myProfile, setMyInterests]);
 
-  // Fetch discover profiles on mount
+  // Fetch discover profiles on mount — ONLY when auth is ready
   useEffect(() => {
-    if (userId && !fetchAttempted) {
+    if (userId && isAuthenticated && hasHydrated && !fetchAttempted) {
+      console.log('[DISCOVER] Auth ready — triggering fetch');
       setFetchAttempted(true);
       seedAndFetch();
+    } else if (!isAuthenticated || !hasHydrated) {
+      console.log('[DISCOVER] Blocked — auth not ready', { isAuthenticated, hasHydrated });
     }
-  }, [userId, fetchAttempted, seedAndFetch]);
-
-  // Debug: log state changes
-  useEffect(() => {
-    console.log('[Discover] State:', {
-      profilesCount: profiles.length,
-      currentIndex: currentProfileIndex,
-      isLoading,
-      hasCurrent: !!currentProfile(),
-    });
-  }, [profiles.length, currentProfileIndex, isLoading, currentProfile]);
+  }, [userId, isAuthenticated, hasHydrated, fetchAttempted, seedAndFetch]);
 
   const handleSwipe = useCallback(
     (direction: 'left' | 'right' | 'up') => {
@@ -191,6 +214,7 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
             targetUserId: target.userId,
             action,
           }),
+          requireAuth: true,
         }).then(async (res) => {
           if (res.ok) {
             const data = await res.json();
@@ -244,21 +268,21 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
   }, [undoSwipe]);
 
   const handleResetSwipes = useCallback(async () => {
-    if (!userId || isResetting) return;
+    if (!userId || isResetting || !isAuthenticated) return;
     setIsResetting(true);
     setLoading(true);
     setError(null);
     try {
       // 1. Reset swipes via API
-      const res = await apiFetch('/api/swipe/reset', { method: 'POST' });
+      const res = await apiFetch('/api/swipe/reset', { method: 'POST', requireAuth: true });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to reset swipes');
       }
       // 2. Re-seed (this also resets demo user swipes on the server side)
-      await apiFetch('/api/seed/bulk', { method: 'POST' }).catch(() => {});
+      await apiFetch('/api/seed/bulk', { method: 'POST', requireAuth: true }).catch(() => {});
       // 3. Fetch discover profiles fresh
-      const discoverRes = await apiFetch('/api/discover');
+      const discoverRes = await apiFetch('/api/discover', { requireAuth: true });
       if (!discoverRes.ok) {
         const data = await discoverRes.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to fetch profiles');
@@ -287,7 +311,7 @@ export function DiscoverPage({ onOpenChat }: DiscoverPageProps) {
       setLoading(false);
       setIsResetting(false);
     }
-  }, [userId, isResetting, setProfiles, setLoading, setError]);
+  }, [userId, isAuthenticated, isResetting, setProfiles, setLoading, setError]);
 
   const handleKeepSwiping = useCallback(() => {
     setShowMatchAnimation(false);

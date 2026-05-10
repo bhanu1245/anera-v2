@@ -83,7 +83,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   fetchNotifications: async () => {
     set({ isLoading: true, error: null });
     try {
-      const res = await apiFetch('/api/notifications');
+      const res = await apiFetch('/api/notifications', { requireAuth: true });
       if (!res.ok) {
         throw new Error('Failed to fetch notifications');
       }
@@ -213,7 +213,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   fetchEngagement: async () => {
     set({ isEngagementLoading: true, error: null });
     try {
-      const res = await apiFetch('/api/engagement');
+      const res = await apiFetch('/api/engagement', { requireAuth: true });
       if (!res.ok) {
         throw new Error('Failed to fetch engagement data');
       }
