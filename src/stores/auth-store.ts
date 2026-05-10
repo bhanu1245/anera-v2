@@ -13,6 +13,12 @@ interface AuthState {
   needsOnboarding: boolean;
   error: string | null;
 
+  /** Whether the initial session check has completed (hydration guard) */
+  hasHydrated: boolean;
+
+  /** Whether a session check is in progress right now */
+  isCheckingSession: boolean;
+
   // Actions
   setAuth: (userId: string | null, needsOnboarding?: boolean) => void;
   setLoading: (loading: boolean) => void;
@@ -23,14 +29,18 @@ interface AuthState {
   loginDemo: () => Promise<string | null>;
   logout: () => Promise<void>;
   checkSession: () => Promise<string | null>;
+  /** Full reset of auth state — used during logout to ensure clean slate */
+  resetAuth: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   userId: null,
   isAuthenticated: false,
-  isLoading: true,
+  isLoading: true, // Start true so UI shows loading until first checkSession completes
   needsOnboarding: false,
   error: null,
+  hasHydrated: false,  // Not hydrated until checkSession finishes
+  isCheckingSession: false,
 
   setAuth: (userId, needsOnboarding = false) => {
     set({
@@ -39,12 +49,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isLoading: false,
       needsOnboarding,
       error: null,
+      hasHydrated: true,
     });
   },
 
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error, isLoading: false }),
   clearError: () => set({ error: null }),
+
+  resetAuth: () => {
+    set({
+      userId: null,
+      isAuthenticated: false,
+      isLoading: false,
+      needsOnboarding: false,
+      error: null,
+      hasHydrated: false,
+      isCheckingSession: false,
+    });
+  },
 
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
@@ -82,6 +105,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
         needsOnboarding: data.needsOnboarding || false,
         error: null,
+        hasHydrated: true,
       });
 
       if (data.token) {
@@ -146,6 +170,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
         needsOnboarding: data.needsOnboarding || true,
         error: null,
+        hasHydrated: true,
       });
 
       if (data.token) {
@@ -205,6 +230,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
         needsOnboarding: false,
         error: null,
+        hasHydrated: true,
       });
 
       if (data.token) {
@@ -249,22 +275,39 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isLoading: false,
       needsOnboarding: false,
       error: null,
+      hasHydrated: false,
+      isCheckingSession: false,
     });
   },
 
   checkSession: async () => {
-    set({ isLoading: true });
+    // Prevent concurrent session checks
+    if (get().isCheckingSession) return null;
+
+    set({ isLoading: true, isCheckingSession: true });
     try {
       const res = await apiFetch('/api/auth/session', {
         skipAuthRefresh: true,
       });
       if (!res.ok) {
-        set({ isAuthenticated: false, userId: null, isLoading: false });
+        set({
+          isAuthenticated: false,
+          userId: null,
+          isLoading: false,
+          hasHydrated: true,
+          isCheckingSession: false,
+        });
         return null;
       }
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        set({ isAuthenticated: false, userId: null, isLoading: false });
+        set({
+          isAuthenticated: false,
+          userId: null,
+          isLoading: false,
+          hasHydrated: true,
+          isCheckingSession: false,
+        });
         return null;
       }
       const data = await res.json();
@@ -274,6 +317,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isAuthenticated: true,
           isLoading: false,
           needsOnboarding: data.needsOnboarding || false,
+          hasHydrated: true,
+          isCheckingSession: false,
         });
 
         if (data.token) {
@@ -286,6 +331,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           userId: null,
           isAuthenticated: false,
           isLoading: false,
+          hasHydrated: true,
+          isCheckingSession: false,
         });
         return null;
       }
@@ -294,6 +341,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         userId: null,
         isAuthenticated: false,
         isLoading: false,
+        hasHydrated: true,
+        isCheckingSession: false,
       });
       return null;
     }
