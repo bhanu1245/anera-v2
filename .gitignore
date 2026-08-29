@@ -52,3 +52,27 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Local secrets and development data
+.env
+.env.*
+!.env.example
+
+# Local databases
+db/*.db
+db/*.db-*
+
+# Generated/local uploads
+public/uploads/
+public/public/uploads/
+
+# Next.js
+.next/
+
+# Dependencies
+node_modules/
+
+
+# Local runtime/workspace artifacts
+.zscripts/dev.pid
+upload/*.tar
+
