@@ -26,16 +26,20 @@ import {
 } from '@/types';
 import { cn } from '@/lib/utils';
 
+// zod v4: enum options use `error`, not the v3 `required_error`.
+// `.default()` is deliberately omitted — it makes the schema's input and
+// output types diverge, which breaks the react-hook-form resolver generic.
+// Defaults are supplied by `defaultValues` below instead.
 const profileSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name too long'),
   age: z.number().min(18, 'Must be at least 18').max(120, 'Invalid age'),
   gender: z.enum(['male', 'female', 'non-binary', 'other'], {
-    required_error: 'Gender is required',
+    error: 'Gender is required',
   }),
-  bio: z.string().max(500, 'Bio too long (max 500 chars)').default(''),
-  interests: z.array(z.string()).max(10, 'Maximum 10 interests').default([]),
-  city: z.string().max(100, 'City name too long').default(''),
-  relationshipIntent: z.enum(['casual', 'serious', 'networking', 'friendship', 'not-sure', '']).default(''),
+  bio: z.string().max(500, 'Bio too long (max 500 chars)'),
+  interests: z.array(z.string()).max(10, 'Maximum 10 interests'),
+  city: z.string().max(100, 'City name too long'),
+  relationshipIntent: z.enum(['casual', 'serious', 'networking', 'friendship', 'not-sure', '']),
 });
 
 type FormValues = z.infer<typeof profileSchema>;
@@ -99,8 +103,13 @@ export function ProfileEditForm({ userId }: ProfileEditFormProps) {
       setSaving(true);
       setDirtyFields(new Set());
 
-      // Optimistic update
-      optimisticUpdateProfile(data);
+      // Optimistic update.
+      // The form permits an empty relationshipIntent ('' = not set), matching
+      // the database default and the API's accepted values, while the shared
+      // RelationshipIntent type does not include ''. Whether '' is a valid
+      // domain value — and whether the non-dating intents survive at all — is
+      // open (OQ-P01) and is not decided here.
+      optimisticUpdateProfile(data as Partial<ProfileFormData>);
 
       try {
         const res = await apiFetch('/api/profile', {

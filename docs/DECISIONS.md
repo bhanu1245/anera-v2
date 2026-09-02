@@ -117,6 +117,8 @@ Used **inside** documents for individual technologies, features and options. The
 | 2026-09-01 | Decisions 16–35 approved by the product owner and recorded in this register. This is the first decision record in the project's history. |
 | 2026-09-01 | Documentation consolidation performed: subsystem specifications created for the approved decision areas; implementation gap register created; master specification annotated with a Post-Decision Update. No application code changed. |
 | 2026-09-02 | Documentation taxonomy review. Two renames; three creations rejected as duplicates; flat structure retained. Recorded in `DOCUMENTATION-AUDIT.md` §8. |
+| 2026-09-02 | **Decision 45 approved.** Incompatible Phase 2/3 implementation removed from the active codebase under Option A and preserved at tag `pre-phase1-legacy-snapshot`. Typecheck 43→0, lint 6→0, build passes with type validation enforced. **`OQ-SCHEMA-01` resolved: legacy SQLite data discarded (demo/seed only, no real accounts).** |
+| 2026-09-02 | **Decision 44 approved.** npm and `package-lock.json` made authoritative; `bun.lock` removed. `IG-62` closed. |
 | 2026-09-02 | **Decision 43 approved.** Vitest, Playwright, GitHub Actions, `tsc`, ESLint and the Next.js production build are locked as the verification stack; coverage is defined as critical-path plus a no-regression ratchet rather than an arbitrary percentage. **`OQ-B06` / `OD-28` / `BL-06` resolved — the last Phase 0 blocker. Phase 0 is FROZEN.** No application code changed. |
 | 2026-09-02 | **Decisions 36–42 approved.** The V2 technology stack and authentication architecture are locked; the five-tier subscription ladder supersedes D26's tier names; the thirteen-phase implementation plan is approved; legacy code policy and documentation taxonomy are formalised; principles are supplied for most of D16–D23. **`OD-09`/`OQ-B02` (authentication) and `OD-29`/`OQ-B03` (phase list) — blocking since the project began — are resolved.** No application code changed. |
 
@@ -155,6 +157,7 @@ Used **inside** documents for individual technologies, features and options. The
 | **42** | **Principles Supplied for Decisions 16–23** | `APPROVED` | ✅ | `DATING-CORE.md`, `AI-ARCHITECTURE.md`, `EVENTS.md`, `ELITE.md`, `SOCIAL.md` |
 | **43** | **Testing Stack, CI and the Phase 1 Verification Gate** | `APPROVED` | ✅ | `TESTING-STRATEGY.md`, `TECH-STACK.md` |
 | **44** | **Package Manager and Lockfile** — npm + `package-lock.json` | `APPROVED` | ✅ | `TECH-STACK.md` |
+| **45** | **Removal of Incompatible Phase 2/3 Implementation (Option A)** — also resolves `OQ-SCHEMA-01` | `APPROVED` | ✅ | `IMPLEMENTATION-GAPS.md`, `ROADMAP.md` |
 
 > **Reading note.** Decisions 16–25 were approved with a title and subject area but **no detailed principles**. This is faithfully recorded. Several of the capabilities they own — Speed Dating, Experiences, Gifts, Boosts, Spotlight, Super Likes, Marketplace, Events, Hosts, Elite, Concierge, Relationship Memory, Travel Mode, Relocation Mode, Anera Credits, user earning, City Health Score, AI Gateway — are **named inside the approved principle lists of Decisions 26–35**. Their *existence* is therefore approved by attestation. Their *rules* are not.
 
@@ -1820,6 +1823,66 @@ D43 (CI reproducibility) · D36 (stack) · D40 (sandbox artefacts are legacy).
 |---|---|
 | **Bun as package manager** | `bun.lock` predates V2 preparation and was not updated by it; npm performed the last install. Choosing Bun would contradict the repository's own V2-preparation evidence |
 | **Keep both lockfiles** | Directly causes `IG-62`; makes `npm ci` and Bun installs diverge; no reproducible CI path |
+
+---
+
+### Decision 45 — Removal of Incompatible Phase 2/3 Implementation (Option A)
+
+**Status: `APPROVED` — 2026-09-02**
+**Resolves:** the Phase 1 schema/code coexistence conflict raised during Phase 1 Milestone 3.
+**Also resolves:** `OQ-SCHEMA-01` (see below).
+
+#### Context
+
+`BACKEND-SCHEMA.md` §2 scopes the Phase 1 migration to six foundation tables. Ten source files plus ~13 UI components depended on Prisma models that Phase 1 does not create, so the Phase 1 schema and the MVP application could not coexist: typecheck and production build — both hard gates under `TESTING-STRATEGY.md` §4.1 — would fail. D43 forbids weakening the gate.
+
+#### Decision
+
+**The incompatible Phase 2/3 implementation is removed from the active codebase.** It is preserved in Git and rebuilt in its owning phase against the V2 architecture.
+
+Removed: discovery · swipe · matches · messaging/chat · notifications · engagement/streaks · the `/api/dev` panel · seed endpoints · `demo-login` · the `/api/premium` and `/api/settings` stubs · the API scaffolding route · the notification mini-service · the websocket examples · dependent UI · `types/swipe.ts` · the now-unused vendored `ui/carousel.tsx`.
+
+Retained: authentication routes · profile and photo routes · profile UI · auth and profile stores · shared libraries · the remaining shadcn/ui library.
+
+#### Preservation
+
+| Item | Value |
+|---|---|
+| Tag | `pre-phase1-legacy-snapshot` |
+| Commit | `abc1b7d9c62c2d8a9315b5831bda121750f0a53b` |
+
+**Reference only.** Per D40 this implementation is classified incompatible — built on SQLite, HMAC/Bearer authentication and the legacy `requireAuth`, with no preferences and no blocking. It **must not be ported forward**.
+
+#### Non-Negotiable Rules
+
+- Phase 2/3 functionality is **rebuilt**, not restored, using the D36 stack, PostgreSQL, D37 authentication, the current authorization model and the approved preferences/blocking architecture.
+- The preservation snapshot is **not** a justification for retaining legacy architecture in the active build.
+- Phase 2 discovery is built **with preferences and blocking from day one** (`ROADMAP.md` Phase 2), which the removed implementation could not do.
+
+#### Dependencies
+
+D40 (legacy policy — five-step gate) · D36 (PostgreSQL) · D37 (authentication) · D43 (gate must not be weakened) · `BACKEND-SCHEMA.md` §2.
+
+#### Implementation Implications
+
+Verified after removal: typecheck **0 errors** (from 43), lint **0 errors** (from 6), production build **passes with type validation enforced**, tests **4/4**, and **zero** references to the removed Prisma models remain in `src/`.
+
+`typescript.ignoreBuildErrors` was removed from `next.config.ts` as required by D43; sandbox coupling in that file (`.space-z.ai` origins, `output: "standalone"`) was removed per D40.
+
+#### `OQ-SCHEMA-01` — resolved
+
+**The legacy SQLite database is discarded. No data is migrated to PostgreSQL.**
+
+Evidence: `db/custom.db` is **gitignored and untracked**; commit `495cba7` removed it from version control; it is absent from the preservation snapshot. All **16** user rows are demo/seed fixtures (15 `@anera.demo`, 1 `demo@anera.app`) and **none has a password**, so no account was created by real registration. There is no real user data.
+
+No migration logic will be written to preserve disposable seed data. The file is left in place locally as a gitignored artefact; it has no role in V2.
+
+#### Alternatives rejected
+
+| Alternative | Why rejected |
+|---|---|
+| **B — keep Phase 2/3 tables in the Phase 1 migration** | Contradicts `BACKEND-SCHEMA.md` §2/§3/§6 |
+| **C — quarantine the code outside the build** | Retains dead code Phase 2 discards anyway; quarantined code rots unseen |
 
 ---
 

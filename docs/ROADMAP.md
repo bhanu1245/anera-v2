@@ -73,6 +73,18 @@ REGRESSION TEST → PHASE FREEZE → NEXT PHASE
 
 ## Phase 1 — V2 Foundation
 
+**Status: IN PROGRESS.** M1 ✅ · M2 ✅ · M3 ⏸ blocked on PostgreSQL · M4–M7 not started.
+
+| Milestone | State |
+|---|---|
+| M1 — Audit + package manager | ✅ **Done** (D44) — npm authoritative, `IG-62` closed |
+| M2 — Vitest · Playwright · CI · static verification | ✅ **Done** (D43) — 4/4 tests, typecheck 0, lint 0, build passes with types enforced |
+| M3 — Prisma/PostgreSQL | ⏸ **Blocked** — Option A cleanup done (D45); **PostgreSQL unavailable in the environment** |
+| M4 — Authentication/session | Not started |
+| M5 — Signup/login/logout/protected routes | Not started |
+| M6 — Profile/photos/preferences | Not started |
+| M7 — Full Phase 1 gate | Not started |
+
 **Goal.** A secure, tested foundation: PostgreSQL, cookie-session auth, profile creation. **Everything else depends on this being right.**
 
 **Dependencies.** Phase 0 freeze.

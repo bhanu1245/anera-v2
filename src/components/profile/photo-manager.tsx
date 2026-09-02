@@ -143,11 +143,15 @@ export function PhotoManager({ userId }: PhotoManagerProps) {
     profile?.photos || []
   );
 
-  React.useEffect(() => {
-    if (profile?.photos) {
-      setLocalPhotos(profile.photos);
-    }
-  }, [profile?.photos]);
+  // Re-sync local photos when the stored profile changes (e.g. after a save
+  // and refetch). Adjusting state during render is React's documented pattern
+  // for deriving state from props/store, and avoids the cascading re-render
+  // that setState-inside-an-effect causes.
+  const [syncedPhotos, setSyncedPhotos] = useState(profile?.photos);
+  if (profile?.photos !== syncedPhotos) {
+    setSyncedPhotos(profile?.photos);
+    setLocalPhotos(profile?.photos ?? []);
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

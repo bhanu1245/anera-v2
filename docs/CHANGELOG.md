@@ -12,6 +12,50 @@
 
 ---
 
+## 2026-09-02 — Phase 1 Milestones 1–3: D44, D45, Option A removal
+
+First application code changes of the project. Phase 0 documentation unchanged except for status/decision records.
+
+### Decision 44 — Package manager and lockfile
+
+**npm + `package-lock.json` authoritative. `bun.lock` deleted.** Determined from evidence: `package-lock.json` was added by `495cba7` ("Prepare Anera MVP for V2 development") with 14,239 insertions while that same commit left `bun.lock` untouched; npm performed the last install. **`IG-62` closed.**
+
+### Decision 45 — Removal of incompatible Phase 2/3 implementation (Option A)
+
+Approved by the product owner. `BACKEND-SCHEMA.md` §2 scopes Phase 1 to six tables, but 10 source files and ~13 UI components depended on models Phase 1 does not create — so the schema and the MVP code could not coexist without failing the typecheck and build gates.
+
+**Preserved before deletion:** tag `pre-phase1-legacy-snapshot` → commit `abc1b7d9c62c2d8a9315b5831bda121750f0a53b`. Reference only; per D40 it must not be ported forward.
+
+**Removed:** discovery · swipe · matches · messaging/chat · notifications · engagement · `/api/dev` · seed endpoints · `demo-login` · `/api/premium` and `/api/settings` stubs · API scaffolding route · notification mini-service · websocket examples · dependent UI · `types/swipe.ts` · unused vendored `ui/carousel.tsx`.
+
+**Retained:** authentication routes · profile and photo routes · profile UI · auth/profile stores · shared libraries · shadcn/ui library.
+
+**`OQ-SCHEMA-01` resolved — legacy SQLite data discarded, no migration.** `db/custom.db` is gitignored, untracked, absent from the snapshot, and contains only demo/seed fixtures: all 16 users are `@anera.demo`/`demo@anera.app` and **none has a password**.
+
+### Verification after removal
+
+| Check | Before | After |
+|---|---|---|
+| Typecheck | 43 errors | **0** |
+| Lint | 6 errors | **0** |
+| Production build | passed with types **skipped** | **passes with type validation enforced** |
+| Tests | 4/4 | **4/4** |
+| References to removed Prisma models | 10 files | **0** |
+
+`typescript.ignoreBuildErrors` removed from `next.config.ts` per D43; sandbox coupling (`.space-z.ai` origins, `output: "standalone"`) removed per D40.
+
+Three pre-existing defects fixed to clear the gate: zod v4 API migration in `profile-edit-form.tsx` (`required_error` → `error`, `.default()` removal), `useSyncExternalStore` in `use-mobile.ts`, and render-phase state sync in `photo-manager.tsx`.
+
+### Gaps closed
+
+`IG-62` · `IG-26` · `IG-67` · `IG-11` · `IG-76` · `IG-04`. Partial: `IG-21`, `IG-53`, `IG-58`. Superseded by removal (requirement retained): 15 further gaps — see `IMPLEMENTATION-GAPS.md` §9.
+
+### Still blocked
+
+**PostgreSQL is unavailable** in the environment — `psql` absent, Docker daemon not running, port 5432 refused. M4 onward cannot be verified against a real database and has not been started.
+
+---
+
 ## 2026-09-02 — `OQ-B06` resolved; Decision 43; **Phase 0 FROZEN**
 
 The last Phase 0 blocker is closed. **Phase 1 may begin.**

@@ -6,8 +6,8 @@
 | **Status** | **OPEN** — a register of unresolved items. |
 | **Authority** | None. This document records what is *not* decided. Resolution happens only through a new approved entry in [`DECISIONS.md`](DECISIONS.md). |
 | **Purpose** | Every genuinely unresolved question, in one place, so nothing is silently assumed. |
-| **Last updated** | 2026-09-02 — Decision 43 resolved `OQ-B06` and `OQ-TEST-01`; `OQ-TEST-02` added. **Phase 0 FROZEN.** |
-| **Open items** | 178 (6 blocking) |
+| **Last updated** | 2026-09-02 — D44 and D45 resolved `IG-62` and `OQ-SCHEMA-01`; Phase 1 Milestones 1–3 in progress |
+| **Open items** | 177 (6 blocking) |
 
 ---
 
@@ -296,7 +296,7 @@ New questions surfaced while writing the architecture, safety and product docume
 | ID | Question | Status |
 |---|---|---|
 | **OQ-API-01** | What fields are in the public profile view returned to another authenticated user? | Unresolved — needed for Phase 2 |
-| **OQ-SCHEMA-01** | Is existing MVP SQLite data migrated to PostgreSQL, or discarded? | Unresolved — needed for Phase 1 |
+| ~~**OQ-SCHEMA-01**~~ | ~~Is existing MVP SQLite data migrated to PostgreSQL, or discarded?~~ | ✅ **RESOLVED by Decision 45** (2026-09-02) — **discarded, no migration.** `db/custom.db` is gitignored and untracked, was removed from version control by `495cba7`, and contains only demo/seed fixtures: all 16 users are `@anera.demo`/`demo@anera.app` and **none has a password**, so no account was created by real registration. |
 | **OQ-SEC-01** | Is upload content scanning (malware/CSAM) required, and by which provider? | Unresolved — **legal review likely** |
 | **OQ-SEC-02** | Penetration testing cadence and scope. | Unresolved |
 | **OQ-OPS-01** | Backup frequency, retention, and RPO/RTO targets. | Unresolved |
@@ -368,8 +368,8 @@ Recorded to prevent regression. These were open in the 2026-08-30 master specifi
 | Analytics | 6 | 0 |
 | Administration | 11 | 0 |
 | UX & design | 10 | 0 |
-| Raised 2026-09-02 (§15b) | 28 | 0 |
-| **Total** | **178** | **6** |
+| Raised 2026-09-02 (§15b) | 27 | 0 |
+| **Total** | **177** | **6** |
 
 > Some questions cut across domains and are cross-referenced rather than duplicated — for example retention appears under Privacy (`OQ-PR03`) and is referenced from Communication (`OQ-C06`) and Analytics (`OQ-AN05`).
 

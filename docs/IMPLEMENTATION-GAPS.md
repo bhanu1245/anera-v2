@@ -6,7 +6,7 @@
 | **Status** | **REFERENCE** — a register of verified findings. It approves nothing and requires nothing on its own. |
 | **Authority** | Derived from the repository audit in [`00-MASTER-SPECIFICATION.md`](00-MASTER-SPECIFICATION.md) (2026-08-30) and the approved decisions in [`DECISIONS.md`](DECISIONS.md) (2026-09-01). |
 | **Purpose** | The single register of every place where the current implementation conflicts with, or falls short of, an approved decision — or is otherwise technical debt. |
-| **Last updated** | 2026-09-01 |
+| **Last updated** | 2026-09-02 — Phase 1 remediation log added (§9); `IG-62`, `IG-26`, `IG-67`, `IG-11`, `IG-76`, `IG-04` closed |
 | **Gaps recorded** | 76 |
 
 ---
@@ -203,7 +203,49 @@ These support approved decisions and must **not** be removed during any remediat
 
 ---
 
-## 9. Rules for handling this register
+## 9. Phase 1 remediation log
+
+Gaps closed or changed by Phase 1 implementation. **This section is the current status; the rows in §3–§6 record the original finding.**
+
+### 9.1 Closed — Milestone 1 (D44)
+
+| Gap | Closed by |
+|---|---|
+| `IG-62` | npm + `package-lock.json` made authoritative; `bun.lock` deleted; `packageManager` declared |
+
+### 9.2 Closed — Milestone 3, Option A removal (D45)
+
+| Gap | Closed by |
+|---|---|
+| `IG-26` | `/api/dev` deleted — the unauthenticated impersonation and database-wipe surface no longer exists |
+| `IG-67` | `demo-login`, `seed` and `seed/bulk` deleted; `loginDemo` removed from the auth store. **No unauthenticated session-granting endpoint remains** |
+| `IG-11` | `/api/premium` stub deleted. Commerce is rebuilt in Phase 6 |
+| `IG-76` | `/api/settings` stub deleted |
+| `IG-04` | External `z-cdn.chatglm.cn` favicon reference removed with the sandbox cleanup |
+
+### 9.3 Superseded by removal — requirement returns with the feature
+
+The code carrying these gaps no longer exists. The **approved requirement stands**; it is satisfied when the feature is rebuilt in its owning phase.
+
+`IG-05` (unauthenticated profile read) · `IG-07` · `IG-08` · `IG-14` · `IG-16` · `IG-19` · `IG-28` · `IG-29` · `IG-30` · `IG-31` · `IG-34` · `IG-40` · `IG-42` · `IG-54` · `IG-75`
+
+> These are **not** fixed. Phase 2 must build discovery *with* preferences and blocking; Phase 3 must build messaging on real-time transport; and so on. The gap register entry is retained so the requirement is not lost.
+
+### 9.4 Partially closed
+
+| Gap | Progress | Remaining |
+|---|---|---|
+| `IG-21` | Vitest + Playwright + GitHub Actions established; `typescript.ignoreBuildErrors` **removed**; typecheck **0 errors**; lint **0 errors**; build passes with type validation enforced | ~27 ESLint rules remain disabled in `eslint.config.mjs`; CI not yet observed green on a real run; application test coverage is still 0 |
+| `IG-53` | `next.config.ts` sandbox origins and `output: "standalone"` removed; `mini-services/` and `examples/` deleted; hard-coded `localhost:3003` gone with `src/lib/notifications.ts` | `Caddyfile`, `start-dev.sh` and `.zscripts/` remain at the repository root |
+| `IG-58` | SQLite is formally discarded — `OQ-SCHEMA-01` resolved by D45, no data migration | PostgreSQL not yet provisioned; `DATABASE_URL` still points at the legacy file |
+
+### 9.5 Unchanged — Milestone 4 scope
+
+`IG-01` · `IG-02` · `IG-63` · `IG-65` · `IG-66` · `IG-70` · `IG-71` · `IG-74` — the legacy authentication architecture is still present in `src/lib/auth.ts`, `src/lib/api-client.ts`, `src/stores/auth-store.ts`, `src/app/page.tsx` and `src/app/api/auth/logout/route.ts`. **None was reintroduced**; all are replaced in Milestone 4 per `AUTHENTICATION.md` §8.
+
+---
+
+## 10. Rules for handling this register
 
 1. **Do not fix anything here without an approved phase.** Opportunistic fixes violate the approved method.
 2. **Do not fix `IG-01`.** It is `UNRESOLVED` — the product owner must decide first.

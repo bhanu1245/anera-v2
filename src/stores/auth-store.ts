@@ -28,7 +28,6 @@ interface AuthState {
   clearError: () => void;
   login: (email: string, password: string) => Promise<string | null>;
   register: (email: string, password: string, name: string) => Promise<string | null>;
-  loginDemo: () => Promise<string | null>;
   logout: () => Promise<void>;
   checkSession: () => Promise<string | null>;
   /** Full reset of auth state — used during logout to ensure clean slate */
@@ -237,81 +236,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  loginDemo: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      console.log('[AUTH] Demo login attempt');
-
-      const res = await apiFetch('/api/auth/demo-login', {
-        method: 'POST',
-        skipAuthRefresh: true,
-      });
-      if (!res.ok) {
-        let errorMsg = 'Login failed';
-        try {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            errorMsg = data.error || errorMsg;
-          }
-        } catch {
-          // Ignore JSON parse errors
-        }
-        throw new Error(errorMsg);
-      }
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error('Server returned an unexpected response. Please try again.');
-      }
-      const data = await res.json();
-
-      // Store token FIRST
-      if (data.token) {
-        setStoredToken(data.token);
-      }
-
-      // Verify session
-      console.log('[AUTH] Demo login response received, verifying session...');
-      const verifiedUserId = await get().checkSession();
-
-      if (verifiedUserId) {
-        console.log('[AUTH] Session verified after demo login, userId:', verifiedUserId);
-        markAuthReady();
-        return verifiedUserId;
-      } else {
-        console.warn('[AUTH] Session verification failed after demo login, using login data');
-        set({
-          userId: data.userId,
-          isAuthenticated: true,
-          isLoading: false,
-          needsOnboarding: false,
-          error: null,
-          hasHydrated: true,
-        });
-        markAuthReady();
-        return data.userId;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Login failed';
-      console.error('[AUTH] Demo login failed:', msg);
-      if (msg.includes('Unexpected token') || msg.includes('is not valid JSON')) {
-        set({
-          error: 'Unable to connect to server. Please refresh the page.',
-          isLoading: false,
-          isAuthenticated: false,
-          userId: null,
-        });
-        return null;
-      }
-      set({
-        error: msg,
-        isLoading: false,
-        isAuthenticated: false,
-        userId: null,
-      });
-      return null;
-    }
-  },
 
   logout: async () => {
     console.log('[AUTH] Logging out...');
