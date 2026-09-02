@@ -6,16 +6,18 @@
 | **Status** | **REFERENCE** — a register of verified findings. It approves nothing and requires nothing on its own. |
 | **Authority** | Derived from the repository audit in [`00-MASTER-SPECIFICATION.md`](00-MASTER-SPECIFICATION.md) (2026-08-30) and the approved decisions in [`DECISIONS.md`](DECISIONS.md) (2026-09-01). |
 | **Purpose** | The single register of every place where the current implementation conflicts with, or falls short of, an approved decision — or is otherwise technical debt. |
-| **Last updated** | 2026-09-02 — Phase 1 remediation log added (§9); `IG-62`, `IG-26`, `IG-67`, `IG-11`, `IG-76`, `IG-04` closed |
+| **Last updated** | 2026-09-02 — Phase 1 M1–M3 remediation log (§9); `IG-62`, `IG-26`, `IG-67`, `IG-11`, `IG-76`, `IG-04`, `IG-58`, `IG-12`, `IG-22`, `IG-60` closed |
 | **Gaps recorded** | 76 |
 
 ---
 
 ## 1. How to use this document
 
-> ### **NOTHING IN THIS REGISTER IS TO BE FIXED NOW.**
+> ### **FIX A GAP ONLY INSIDE ITS APPROVED PHASE.**
 >
-> This is a documentation-only record. Remediation happens inside an approved implementation phase, and **no phase has been approved** (`OD-29`). Fixing a gap opportunistically would violate the approved phase-by-phase method and Decision 30's stop-and-surface rule.
+> Remediation happens inside an approved implementation phase. Fixing a gap opportunistically violates the approved phase-by-phase method and Decision 30's stop-and-surface rule.
+>
+> **Updated 2026-09-02:** Phase 0 is frozen and **Phase 1 is in progress** (D39), so gaps in Phase 1 scope are now actively being closed — see **§9**. The rows in §3–§6 record the **original 2026-08-30 finding** and are not rewritten; §9 carries current status. Gaps outside Phase 1 scope remain untouched.
 
 ### 1.1 Gap types
 
@@ -239,13 +241,26 @@ The code carrying these gaps no longer exists. The **approved requirement stands
 | `IG-53` | `next.config.ts` sandbox origins and `output: "standalone"` removed; `mini-services/` and `examples/` deleted; hard-coded `localhost:3003` gone with `src/lib/notifications.ts` | `Caddyfile`, `start-dev.sh` and `.zscripts/` remain at the repository root |
 | `IG-58` | SQLite is formally discarded — `OQ-SCHEMA-01` resolved by D45, no data migration | PostgreSQL not yet provisioned; `DATABASE_URL` still points at the legacy file |
 
-### 9.5 Unchanged — Milestone 4 scope
+### 9.5 Milestone 3 — PostgreSQL foundation (2026-09-02)
+
+| Gap | Status |
+|---|---|
+| `IG-58` | ✅ **CLOSED** — PostgreSQL 16.15 provisioned; Prisma provider `postgresql`; migration `20260902143350_phase1_foundation` applied; SQLite fully retired |
+| `IG-12` | ✅ **CLOSED at the schema level** — all five relations carry foreign keys with `CASCADE`, verified by an automated cascade-deletion test. Erasure *policy* (hard vs soft, `OQ-PR06`) remains open |
+| `IG-22` | ✅ **CLOSED** — `prisma/migrations/` is tracked in git; `migration_lock.toml` provider is `postgresql` |
+| `IG-16` | Partially addressed — a `preferences` table now exists, so Phase 2 discovery *can* be preference-filtered. The behaviour itself is Phase 2 |
+| `IG-60` / `TI-01` | ✅ **CLOSED** — the Prisma singleton is restored in `src/lib/db.ts`. It had been removed to work around a stale-client bug that no longer applies now the client is generated from the PostgreSQL schema |
+| **New — fixed on discovery** | `src/lib/db.ts` ran a SQLite `PRAGMA foreign_keys = ON` on every client construction. Against PostgreSQL this failed with `42601 syntax error at or near "PRAGMA"`, swallowed by a `.catch()`. Removed; PostgreSQL enforces foreign keys natively |
+
+**Legacy Phase 1 routes removed (Option A, 2026-09-02).** `api/profile/route.ts`, `api/auth/login/route.ts` and `api/auth/register/route.ts` were built on the MVP field shapes (`User.name`, `Profile.age`, interests-as-JSON-string) and could not compile against the approved Phase 1 schema. Per D40 they classify *incompatible → replace*. **The Phase 1 requirements for registration, login, profile creation and profile editing are unchanged** and are rebuilt in M4/M5/M6 against D37 authentication. Client callers (`page.tsx`, `profile-editor`, `profile-edit-form`, `auth-store`) were deliberately retained — they are dead at runtime until those milestones, but compile cleanly and are rewritten there.
+
+### 9.6 Unchanged — Milestone 4 scope
 
 `IG-01` · `IG-02` · `IG-63` · `IG-65` · `IG-66` · `IG-70` · `IG-71` · `IG-74` — the legacy authentication architecture is still present in `src/lib/auth.ts`, `src/lib/api-client.ts`, `src/stores/auth-store.ts`, `src/app/page.tsx` and `src/app/api/auth/logout/route.ts`. **None was reintroduced**; all are replaced in Milestone 4 per `AUTHENTICATION.md` §8.
 
 ---
 
-## 10. Rules for handling this register
+## 11. Rules for handling this register
 
 1. **Do not fix anything here without an approved phase.** Opportunistic fixes violate the approved method.
 2. **Do not fix `IG-01`.** It is `UNRESOLVED` — the product owner must decide first.
