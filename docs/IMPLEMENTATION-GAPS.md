@@ -6,7 +6,7 @@
 | **Status** | **REFERENCE** — a register of verified findings. It approves nothing and requires nothing on its own. |
 | **Authority** | Derived from the repository audit in [`00-MASTER-SPECIFICATION.md`](00-MASTER-SPECIFICATION.md) (2026-08-30) and the approved decisions in [`DECISIONS.md`](DECISIONS.md) (2026-09-01). |
 | **Purpose** | The single register of every place where the current implementation conflicts with, or falls short of, an approved decision — or is otherwise technical debt. |
-| **Last updated** | 2026-09-02 — Phase 1 M1–M3 remediation log (§9); `IG-62`, `IG-26`, `IG-67`, `IG-11`, `IG-76`, `IG-04`, `IG-58`, `IG-12`, `IG-22`, `IG-60` closed |
+| **Last updated** | 2026-09-03 — Phase 1 M4 authentication (§9.6); `IG-01`, `IG-02`, `IG-63`, `IG-65`, `IG-66`, `IG-70`, `IG-74` closed |
 | **Gaps recorded** | 76 |
 
 ---
@@ -39,6 +39,7 @@
 | `OPEN — BLOCKED` | Cannot be scheduled until a decision is made. |
 | `OPEN — AWAITING PHASE` | Requirement is approved; awaits an approved implementation phase. |
 | `OPEN — DEBT` | Technical debt; awaits an approved phase. |
+| ✅ `CLOSED — <milestone> (<date>)` | Remediated, tested and accepted inside an approved phase. The row keeps its original 2026-08-30 finding text; §9 records what was done. |
 
 ### 1.4 Provenance
 
@@ -66,7 +67,9 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 
 > Gap IDs are labels, not a contiguous sequence. The highest id in use is `IG-76`; some numbers in the range are unused.
 
-**The single blocking item is `IG-01`** — the authentication conflict. Decisions 16–35 do **not** resolve it.
+**`IG-01` was the single blocking item** — the authentication conflict. Decisions 16–35 did **not** resolve it; **Decision 37** did, and Phase 1 Milestone 4 implemented it. Closed 2026-09-03 (§9.6).
+
+> The counts above are the original 2026-08-30 audit totals and are deliberately not decremented as gaps close — the register records what was found, and §9 records what has since been remediated.
 
 ---
 
@@ -74,7 +77,7 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 
 | ID | Domain | Current state | Approved requirement | Gap / conflict | Type | Resolution required | Decision dependency | Status | Origin |
 |---|---|---|---|---|---|---|---|---|---|
-| **IG-01** | Authentication | Session token written to `localStorage` and sent as `Authorization: Bearer` | HTTP-only cookie is the **single** auth source of truth; server-side validation; **no localStorage tokens, no Bearer transport, no `authReady`/`waitForAuth`/hydration-as-auth** | Code contradicts the approved architecture | CONFLICT | **Remove the entire legacy auth path** and replace with DB-backed cookie sessions. Scope: `AUTHENTICATION.md` §8 | ✅ **RESOLVED by Decision 37** (2026-09-02) | `OPEN — PHASE 1` | `CONF-01`, `SEC-02`, `OD-09` |
+| **IG-01** | Authentication | Session token written to `localStorage` and sent as `Authorization: Bearer` | HTTP-only cookie is the **single** auth source of truth; server-side validation; **no localStorage tokens, no Bearer transport, no `authReady`/`waitForAuth`/hydration-as-auth** | Code contradicts the approved architecture | CONFLICT | **Remove the entire legacy auth path** and replace with DB-backed cookie sessions. Scope: `AUTHENTICATION.md` §8 | ✅ **RESOLVED by Decision 37** (2026-09-02) | ✅ `CLOSED — M4 (2026-09-03)` | `CONF-01`, `SEC-02`, `OD-09` |
 | **IG-28** | Communication / T&S | No `Block` model; no blocking anywhere | D33 blocking; D34 **immediate blocking** | Approved twice; entirely absent | IMPLEMENTATION GAP | Design and build blocking, incl. block semantics | D33, D34 | `OPEN — AWAITING PHASE` | §22 audit |
 | **IG-29** | Communication / T&S | Nothing can be reported — no profile, photo or message reporting | D33 reporting; D34 reporting | Approved twice; entirely absent | IMPLEMENTATION GAP | Design and build reporting, incl. categories and triage | D33, D34 | `OPEN — AWAITING PHASE` | §22 audit |
 | **IG-30** | Communication / Security | No rate limiting, lockout, CAPTCHA or anti-spam anywhere in the application | D33 anti-spam; D33 **risk-based rate limiting** | Entirely absent; also a live security exposure (brute force, enumeration, spam) | IMPLEMENTATION GAP | Build risk-based rate limiting and anti-spam | D33, D34 | `OPEN — AWAITING PHASE` | `SEC-03`, `AUTH-06` |
@@ -82,7 +85,7 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | **IG-12** | Privacy | No account deletion, no data export, no retention policy; only 2 foreign keys in the whole schema | D28 data deletion, retention controls, data export where applicable | Deletion is unimplementable reliably — a user delete would orphan rows across 7 tables | IMPLEMENTATION GAP | Data classification, then FK/cascade decision, then deletion/export | D28, `OD-14` | `OPEN — BLOCKED` | `SEC-12`, §27 audit |
 | **IG-26** | Administration | `/api/dev` has **no authentication**; gated only by `NODE_ENV`; exposes `login-as` (impersonate any user) and `reset-database` (delete all data) | D32 RBAC, least privilege, MFA, audit logs, separation of duties, no shared accounts, no raw DB access | Fails all seven approved admin controls simultaneously | CONFLICT | Decide disposition of `/dev`; build the real admin platform | D32 | `OPEN — AWAITING PHASE` | `SEC-04` |
 | **IG-67** | Authentication / Security | `POST /api/auth/demo-login`, `/api/seed`, `/api/seed/bulk` create fully authenticated sessions with **no credential** and **no environment gate** | Security posture: no authentication shortcuts | Anyone can obtain a valid session in any environment | CONFLICT | Environment-gate or remove; decide fate of seed endpoints | `OD-15`, D30, D32 | `OPEN — AWAITING PHASE` | `SEC-07`, `AUTH-04`, `AUTH-05` |
-| **IG-65** | Security | `SESSION_SECRET` falls back to the literal `'anera-dev-secret-change-in-production'`, committed to the repo and duplicated in the notification mini-service | Security posture: do not expose secrets or credentials | If the env var is unset in production, every session token is forgeable by anyone who reads the repository | CONFLICT | Remove the fallback; fail closed; secret management decision | D30, `OD-12` | `OPEN — AWAITING PHASE` | `SEC-01`, `AUTH-01`, `RISK-02` |
+| **IG-65** | Security | `SESSION_SECRET` falls back to the literal `'anera-dev-secret-change-in-production'`, committed to the repo and duplicated in the notification mini-service | Security posture: do not expose secrets or credentials | If the env var is unset in production, every session token is forgeable by anyone who reads the repository | CONFLICT | Remove the fallback; fail closed; secret management decision | D30, `OD-12` | ✅ `CLOSED — M4 (2026-09-03)` | `SEC-01`, `AUTH-01`, `RISK-02` |
 | **IG-33** | Verification | No identity, photo, phone or email verification of any kind | D34 identity verification, **progressive verification**, profile authenticity, photo authenticity | The entire verification capability is absent | IMPLEMENTATION GAP | Requires D34 parameters (levels, providers) before design | D34 | `OPEN — BLOCKED` | §22 audit |
 | **IG-21** | Testing / Delivery | Zero test files; no test script; no CI; `typescript.ignoreBuildErrors: true`; ~25 ESLint rules disabled including `react-hooks/exhaustive-deps` | D30 multi-layer testing, security gates; standing phase-gate requiring per-phase tests | The mandated per-phase verification has no mechanism | IMPLEMENTATION GAP | Choose tooling; establish CI; re-enable type/lint gates | D30, `OD-28` | `OPEN — BLOCKED` | §28 audit, `BL-06` |
 | **IG-05** | Privacy / Security | `GET /api/profile?userId=…` is **unauthenticated** and returns any user's full profile: name, age, gender, bio, city, photos | D28 privacy by design, data minimization | Enumerable personal data exposure | CONFLICT | Require authentication; decide what a non-match may see | D28 | `OPEN — AWAITING PHASE` | `SEC-05`, `RISK-09` |
@@ -105,9 +108,9 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | **IG-09** | Architecture | No domain modules, no service layer; route handlers call Prisma directly | D30 modular / domain-oriented architecture; **modular monolith** | It is a monolith but not a modular one | IMPLEMENTATION GAP | Define domain boundaries (undecided) | D30 | `OPEN — BLOCKED` | §12 audit |
 | **IG-54** | Architecture | Discovery, matching and ranking are one endpoint; ranking does not exist | D30 **separate discovery / matching / ranking responsibilities**; dedicated matching architecture | Responsibilities collapsed | IMPLEMENTATION GAP | Requires matching logic decision (`OD-17`, undecided) | D30, `OD-17` | `OPEN — BLOCKED` | §16, §17 audit |
 | **IG-58** | Infrastructure | SQLite database file (gitignored) plus local-disk photo uploads under `public/uploads` | D30 evidence-based architecture evolution | Cannot support multi-instance deployment; no reproducible database state | TECHNICAL DEBT | Database and storage decisions (`OD-14`, `OD-12`) | D30, `OD-12`, `OD-14` | `OPEN — BLOCKED` | `RISK-05`, `TI-08` |
-| **IG-70** | Authentication | Token revocation blocklist is an in-memory `Set`, capped at 10 000, cleared on restart; its eviction deletes the first half of insertion order | Security posture: sessions must be revocable | Revocations lost on restart; not shared across instances; eviction can drop live revocations | TECHNICAL DEBT | Durable revocation store; depends on `IG-01` resolution | `OD-09`, `OD-13` | `OPEN — BLOCKED` | `AUTH-03`, `RISK-07` |
-| **IG-63** | Authentication | Cookie expires after 30 days; the token itself carries **no expiry claim**, so the Bearer path is effectively unlimited | Security posture: server-side session handling | The two transports disagree about session lifetime | CONFLICT | Token expiry decision; depends on `IG-01` | `OD-09` | `OPEN — BLOCKED` | `CONF-09`, `AUTH-02` |
-| **IG-66** | Security | `src/proxy.ts` reflects any request `Origin` and sets `Access-Control-Allow-Credentials: true`, with no allowlist | Security posture: preserve security boundaries | Any origin can make credentialed API calls | CONFLICT | Origin allowlist; depends on deployment decision | `OD-12`, D30 | `OPEN — AWAITING PHASE` | `SEC-06`, `RISK-10` |
+| **IG-70** | Authentication | Token revocation blocklist is an in-memory `Set`, capped at 10 000, cleared on restart; its eviction deletes the first half of insertion order | Security posture: sessions must be revocable | Revocations lost on restart; not shared across instances; eviction can drop live revocations | TECHNICAL DEBT | Durable revocation store; depends on `IG-01` resolution | `OD-09`, `OD-13` | ✅ `CLOSED — M4 (2026-09-03)` | `AUTH-03`, `RISK-07` |
+| **IG-63** | Authentication | Cookie expires after 30 days; the token itself carries **no expiry claim**, so the Bearer path is effectively unlimited | Security posture: server-side session handling | The two transports disagree about session lifetime | CONFLICT | Token expiry decision; depends on `IG-01` | `OD-09` | ✅ `CLOSED — M4 (2026-09-03)` | `CONF-09`, `AUTH-02` |
+| **IG-66** | Security | `src/proxy.ts` reflects any request `Origin` and sets `Access-Control-Allow-Credentials: true`, with no allowlist | Security posture: preserve security boundaries | Any origin can make credentialed API calls | CONFLICT | Origin allowlist; depends on deployment decision | `OD-12`, D30 | ✅ `CLOSED — M4 (2026-09-03)` | `SEC-06`, `RISK-10` |
 | **IG-18** | Privacy / Media | Photos written to `public/uploads` and served directly; no access control, no signed URLs, no CDN, no content scanning | D28 data classification, media privacy; D30 media architecture | Unmoderated, publicly addressable personal media | IMPLEMENTATION GAP | Media architecture decision | D28, D30, D34 | `OPEN — BLOCKED` | `SEC-10` |
 | **IG-37** | Privacy | No consent capture, no privacy policy, no terms of service anywhere in the product | D28 privacy by design, regional privacy configuration | Absent | IMPLEMENTATION GAP | Requires legal review and consent model decision | D28 | `OPEN — BLOCKED` | §27 audit |
 | **IG-38** | Privacy | No data classification exists | D28 **data classification** | Every downstream privacy control (retention, export, least-privilege access) is unscopeable without it | IMPLEMENTATION GAP | Classification scheme decision — a prerequisite, not a refinement | D28 | `OPEN — BLOCKED` | new |
@@ -121,7 +124,7 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 
 | ID | Domain | Current state | Approved requirement | Gap / conflict | Type | Resolution required | Decision dependency | Status | Origin |
 |---|---|---|---|---|---|---|---|---|---|
-| **IG-02** | Authentication | `next-auth@^4.24.11` declared in `package.json` and **never imported**; auth is hand-rolled HMAC | D30 central authentication governance | The intended auth approach is ambiguous to any reader | CONFLICT | Decide the auth approach; remove or adopt the dependency | D30, `OD-09` | `OPEN — BLOCKED` | `CONF-02` |
+| **IG-02** | Authentication | `next-auth@^4.24.11` declared in `package.json` and **never imported**; auth is hand-rolled HMAC | D30 central authentication governance | The intended auth approach is ambiguous to any reader | CONFLICT | Decide the auth approach; remove or adopt the dependency | D30, `OD-09` | ✅ `CLOSED — M4 (2026-09-03)` | `CONF-02` |
 | **IG-03** | Design system | Two Tailwind configs: v3-style `tailwind.config.ts` (content globs pointing at non-existent `./app`, `./components`, `./pages`) and effective v4 `@theme` in `globals.css` | D31 **consistent design system** | Conflicting configuration; only one is effective | CONFLICT | Remove the dead config | D31 | `OPEN — AWAITING PHASE` | `CONF-03`, `TI-05` |
 | **IG-31** | Communication | Chat polls `GET /api/messages` every 5 seconds; the authenticated Socket.IO service carries notifications only | D30 real-time architecture; D33 messaging | Real-time infrastructure exists and is unused for chat | IMPLEMENTATION GAP | Real-time transport decision | D30, D33 | `OPEN — BLOCKED` | §18 audit |
 | **IG-25** | Globalization / UX | No localization, no RTL; `next-intl` declared and never imported | D31 localization-ready, RTL-ready; D35 language localization, RTL | Absent | IMPLEMENTATION GAP | Language and i18n approach decisions | D31, D35 | `OPEN — BLOCKED` | §9 audit |
@@ -145,7 +148,7 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | **IG-50** | Administration | No emergency controls, kill switches or feature flags | D32 emergency controls, kill switches; D30/D29 feature flags | Absent | IMPLEMENTATION GAP | Decide what is killable and who may trigger | D32, D30 | `OPEN — BLOCKED` | new |
 | **IG-51** | Administration | No controlled export capability | D32/D28 controlled exports | Absent | IMPLEMENTATION GAP | Export governance decision | D32, D28 | `OPEN — BLOCKED` | new |
 | **IG-75** | Notifications | `DeviceToken` model and `POST /api/notifications/register-token` exist and validate platform; **nothing ever sends a push** | D33 notification architecture (D30) | Tokens are collected and never used — data collected without purpose, contrary to D28 minimization | IMPLEMENTATION GAP | Push provider and scope decision | D30, D33, D28 | `OPEN — BLOCKED` | §19 audit |
-| **IG-74** | Authentication | The auth-readiness gate waits up to 5 s, then **proceeds anyway** with a console warning | Security posture: reliable session handling | The original race can still occur after timeout | TECHNICAL DEBT | Review once `IG-01` is resolved | `OD-09` | `OPEN — BLOCKED` | `RISK-18` |
+| **IG-74** | Authentication | The auth-readiness gate waits up to 5 s, then **proceeds anyway** with a console warning | Security posture: reliable session handling | The original race can still occur after timeout | TECHNICAL DEBT | Review once `IG-01` is resolved | `OD-09` | ✅ `CLOSED — M4 (2026-09-03)` | `RISK-18` |
 
 ---
 
@@ -254,9 +257,27 @@ The code carrying these gaps no longer exists. The **approved requirement stands
 
 **Legacy Phase 1 routes removed (Option A, 2026-09-02).** `api/profile/route.ts`, `api/auth/login/route.ts` and `api/auth/register/route.ts` were built on the MVP field shapes (`User.name`, `Profile.age`, interests-as-JSON-string) and could not compile against the approved Phase 1 schema. Per D40 they classify *incompatible → replace*. **The Phase 1 requirements for registration, login, profile creation and profile editing are unchanged** and are rebuilt in M4/M5/M6 against D37 authentication. Client callers (`page.tsx`, `profile-editor`, `profile-edit-form`, `auth-store`) were deliberately retained — they are dead at runtime until those milestones, but compile cleanly and are rewritten there.
 
-### 9.6 Unchanged — Milestone 4 scope
+### 9.6 Milestone 4 — authentication (2026-09-03)
 
-`IG-01` · `IG-02` · `IG-63` · `IG-65` · `IG-66` · `IG-70` · `IG-71` · `IG-74` — the legacy authentication architecture is still present in `src/lib/auth.ts`, `src/lib/api-client.ts`, `src/stores/auth-store.ts`, `src/app/page.tsx` and `src/app/api/auth/logout/route.ts`. **None was reintroduced**; all are replaced in Milestone 4 per `AUTHENTICATION.md` §8.
+The legacy authentication architecture was **replaced**, not refactored (D40 step 4). `src/lib/auth.ts` was deleted; `src/lib/auth/` implements D37.
+
+| Gap | Status |
+|---|---|
+| `IG-01` | ✅ **CLOSED** — no localStorage token, no Bearer transport, no `authReady`/`waitForAuth`/hydration-as-auth anywhere in `src/`. The HTTP-only cookie is the single source of truth; `src/stores/auth-store.ts` is a render cache that cannot grant access. Enforced by `tests/unit/legacy-auth-scan.test.ts`, which fails the build if any pattern returns |
+| `IG-02` | ✅ **CLOSED** — `next-auth` was declared but never imported. D37 settles the approach (hand-rolled DB-backed cookie sessions, no auth library), so the dependency was removed from `package.json` and `package-lock.json` |
+| `IG-63` | ✅ **CLOSED** — there is only one transport now, so the two can no longer disagree about lifetime. Expiry is the `sessions.expiresAt` column, checked server-side on every request. The *value* remains provisional under `OQ-AUTH-01` |
+| `IG-65` | ✅ **CLOSED** — `SESSION_SECRET` is gone rather than fixed. D37 sessions are opaque random identifiers looked up in PostgreSQL, so there is no signing material: nothing to leak and nothing to forge. Removed from `.env.example` and the CI workflow. The literal survives only in the mini-service, which is not Phase 1 code |
+| `IG-66` | ✅ **CLOSED** — `src/proxy.ts` no longer reflects arbitrary origins. Cross-origin credentialed access is refused unless `ANERA_ALLOWED_ORIGINS` names an exact origin, and `Authorization` is no longer advertised as an allowed request header |
+| `IG-70` | ✅ **CLOSED** — revocation is `DELETE FROM sessions`. It is durable, shared by every instance, and cannot evict a live revocation. Verified by an end-to-end test that stops the server, revokes while it is down, and restarts |
+| `IG-74` | ✅ **CLOSED** — the readiness gate it describes no longer exists. There is nothing to wait for: the browser sends the cookie and the server answers |
+| `IG-71` | **Still open** — password reset, email verification and session-management UI are unimplemented. `OQ-AUTH-03`, `OQ-AUTH-04`, `OQ-AUTH-07` |
+| `IG-68` | **Still open** — the notification mini-service's socket CORS is outside Phase 1 scope |
+
+**Provisional parameters.** Five values are `OPEN` in `AUTHENTICATION.md` §10 and were implemented with conservative defaults so Phase 1 could be built and tested. They are collected in `src/lib/auth/config.ts`, each tagged with its open-question id, so ratifying them is a one-file change: session lifetime and sliding renewal (`OQ-AUTH-01`), password length bounds (`OQ-AUTH-02`), cookie name and the absence of a `__Host-` prefix (`OQ-AUTH-06`), rate-limit thresholds (`OQ-C05`). No CSRF synchroniser token was added (`OQ-AUTH-05`); `SameSite=Lax` is the only cross-site defence at present. **None of these changes the architecture, and none is ratified.**
+
+**Fixed on discovery.** The login endpoint skipped the password comparison entirely when the email was unknown, so it answered "no such account" measurably faster than "wrong password" — enumerating accounts by timing despite an identical response body. It now always performs a bcrypt comparison, against a fixed hash when there is no user.
+
+**Known limitation.** Rate limiting is an in-process fixed-window counter (`src/lib/auth/rate-limit.ts`). It satisfies the Phase 1 requirement on a single instance but does not survive a restart or coordinate across instances, and its client key comes from `x-forwarded-for`, which is only trustworthy behind a proxy that overwrites it. A shared store and trusted-proxy configuration are required before multi-instance deployment (`OQ-A01`, `OQ-B04`).
 
 ---
 

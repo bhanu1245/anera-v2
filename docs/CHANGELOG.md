@@ -6,9 +6,33 @@
 | **Status** | **REFERENCE** |
 | **Purpose** | The history of the Anera V2 documentation system. |
 | **Scope** | Documentation only. Code changes belong in git history. |
-| **Last updated** | 2026-09-02 |
+| **Last updated** | 2026-09-03 |
 
 > This changelog records only events that actually occurred and are verifiable from the repository, its git history, or the decision record. It contains no reconstructed or inferred history.
+
+---
+
+## 2026-09-03 — Phase 1 Milestone 4: authentication replaced
+
+The legacy authentication architecture was replaced with the D37 architecture. No decision was changed; D37 was implemented as written.
+
+### Gaps closed
+
+`IG-01` · `IG-02` · `IG-63` · `IG-65` · `IG-66` · `IG-70` · `IG-74`. Recorded in [`IMPLEMENTATION-GAPS.md`](IMPLEMENTATION-GAPS.md) §9.6 with the evidence for each. `IG-01` — the register's single blocking item — is among them.
+
+### What was replaced
+
+The MVP minted an HMAC token server-side, returned it in the response body, and had the client store it and replay it as `Authorization: Bearer`; revocation was an in-memory `Set` emptied by every restart. It is now: credentials verified server-side → session row in PostgreSQL → opaque random id in an HTTP-only cookie → server-side lookup on every protected request → revocation by deleting the row.
+
+`src/lib/auth.ts` was deleted rather than adapted (D40 step 4). The `next-auth` dependency, declared since the MVP and never imported, was removed.
+
+### Documentation changes
+
+Only two source-of-truth statements changed, both in `IMPLEMENTATION-GAPS.md`: the gap statuses above, and a `CLOSED` value added to §1.3. `AUTHENTICATION.md` §10 gained a pointer to where its still-open parameters are provisionally implemented. **No decision, requirement or specification was rewritten** — the implementation matched what was already written, including `§8`'s instruction to replace the origin-reflecting CORS policy with an allowlist.
+
+### Still open
+
+`OQ-AUTH-01` (session lifetime, sliding renewal) · `OQ-AUTH-02` (password policy) · `OQ-AUTH-05` (CSRF synchroniser token) · `OQ-AUTH-06` (cookie name, `__Host-` prefix) · `OQ-C05` (rate-limit thresholds). All five are implemented with provisional values collected in `src/lib/auth/config.ts`, each tagged with its id. None is ratified.
 
 ---
 

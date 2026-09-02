@@ -245,6 +245,8 @@ signup · login · logout · session persistence across refresh · session persi
 | Admin MFA / step-up mechanism | `OQ-AD03` |
 | Future OAuth providers | `OQ-AUTH-08` |
 
+**Provisional implementation (Phase 1 M4, 2026-09-03).** `OQ-AUTH-01`, `OQ-AUTH-02`, `OQ-AUTH-06` and `OQ-C05` needed *some* value before authentication could be built or tested. Conservative defaults were chosen and are collected in `src/lib/auth/config.ts`, each tagged with its open-question id, so ratifying one is a single-file change. `OQ-AUTH-05` was answered "not yet": there is no CSRF synchroniser token, and `SameSite=Lax` is the only cross-site defence. **These values remain `OPEN`** — implementing a placeholder does not decide the question, and none of them alters the architecture above.
+
 ---
 
 *Canonical authentication architecture. Derived from `DECISIONS.md` Decision 37.*

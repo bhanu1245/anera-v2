@@ -23,6 +23,15 @@ import {
 
 const GENERIC_FAILURE = 'Invalid email or password.';
 
+/**
+ * A real bcrypt hash (of a value no account uses) compared against when the
+ * email is unknown, so a failed lookup costs the same time as a wrong
+ * password. Without it the endpoint answers "no such user" measurably faster
+ * than "wrong password", which enumerates accounts by timing even though the
+ * response body is identical.
+ */
+const TIMING_EQUALISER_HASH = '$2b$12$LOTxCUWc46.w2Im39FON/.fgY/EVv77DrbFhd6rl8Tj34r6LgkpVG';
+
 export async function POST(request: NextRequest) {
   const { limit, windowMs } = RATE_LIMITS.login;
   const rl = rateLimit(clientKey(request, 'login'), limit, windowMs);
@@ -47,8 +56,10 @@ export async function POST(request: NextRequest) {
     select: { id: true, email: true, passwordHash: true, status: true },
   });
 
-  // Same response for unknown email and wrong password (AUTHENTICATION.md §4.2).
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+  // Same response — and the same cost — for unknown email and wrong password
+  // (AUTHENTICATION.md §4.2). The comparison always runs.
+  const passwordMatches = await verifyPassword(password, user?.passwordHash ?? TIMING_EQUALISER_HASH);
+  if (!user || !passwordMatches) {
     return apiError(401, 'INVALID_CREDENTIALS', GENERIC_FAILURE);
   }
 
