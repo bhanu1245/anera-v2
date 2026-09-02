@@ -44,7 +44,21 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills"]
+  ignores: [
+    "node_modules/**",
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "examples/**",
+    "skills",
+    // Generated verification artefacts (D43). Not source; never linted.
+    "coverage/**",
+    "playwright-report/**",
+    "test-results/**",
+    // Separate sub-project with its own manifest; DEPRECATED pending OQ-A02.
+    "mini-services/**",
+  ]
 }];
 
 export default eslintConfig;

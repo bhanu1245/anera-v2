@@ -76,3 +76,10 @@ node_modules/
 .zscripts/dev.pid
 upload/*.tar
 
+
+# Test artifacts
+/coverage
+/playwright-report
+/test-results
+/blob-report
+/.playwright

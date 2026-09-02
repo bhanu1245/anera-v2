@@ -1,0 +1,155 @@
+# Anera V2 — Continuous Integration
+#
+# Authority: docs/DECISIONS.md D43 (GitHub Actions locked, required checks),
+#            D44 (npm + package-lock.json, `npm ci`), D36 (PostgreSQL).
+# Gate:      docs/TESTING-STRATEGY.md §4 — static checks, automated tests,
+#            security-boundary assertions.
+#
+# D43: runs on every push and every pull request. A failing run blocks merge.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ── TESTING-STRATEGY.md §4.1 — static checks ────────────────────────────
+  static:
+    name: Static checks (typecheck · lint · build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      # D44: npm ci, never npm install — reproducible from the lockfile.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+        env:
+          # Build-time placeholder only. No secret value is committed;
+          # real secrets come from the environment (SECURITY-GUIDELINES.md §8).
+          DATABASE_URL: postgresql://anera:anera@localhost:5432/anera_build
+          SESSION_SECRET: ci-build-placeholder-not-a-real-secret
+
+  # ── TESTING-STRATEGY.md §4.2 + §4.3 — unit, integration, security ───────
+  test:
+    name: Unit · integration · security-boundary tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anera
+          POSTGRES_PASSWORD: anera
+          POSTGRES_DB: anera_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://anera:anera@localhost:5432/anera_test
+      SESSION_SECRET: ci-test-secret-not-used-in-any-deployment
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      # D43: coverage is reported on every run so the number stays visible.
+      # No numeric threshold is enforced — see TESTING-STRATEGY.md §5.1.
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: warn
+
+  # ── TESTING-STRATEGY.md §4.2 — end-to-end ──────────────────────────────
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    needs: [static]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anera
+          POSTGRES_PASSWORD: anera
+          POSTGRES_DB: anera_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://anera:anera@localhost:5432/anera_e2e
+      SESSION_SECRET: ci-e2e-secret-not-used-in-any-deployment
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Build
+        run: npm run build
+
+      - name: Run E2E suite
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
