@@ -1,29 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getCurrentUser, getSessionToken } from '@/lib/auth';
+import { NextResponse, type NextRequest } from 'next/server';
 import { db } from '@/lib/db';
+import { readSessionIdFromRequest, validateSession } from '@/lib/auth';
 
-// GET /api/auth/session - Check current session status
+/**
+ * GET /api/auth/session — report the current authentication state.
+ *
+ * Authority: docs/AUTHENTICATION.md §4.4, docs/API-SPECIFICATION.md §4,
+ *            docs/DECISIONS.md D37.
+ *
+ * Rebuilt for V2. The state is derived entirely from the server-side
+ * session. **Never returns a token** — the legacy implementation returned
+ * the raw session token in the body so the client could store it, which
+ * D37 prohibition 3 forbids.
+ */
 export async function GET(request: NextRequest) {
-  const userId = getCurrentUser(request);
+  const session = await validateSession(readSessionIdFromRequest(request));
 
-  if (!userId) {
-    return NextResponse.json({ authenticated: false });
+  if (!session) {
+    return NextResponse.json({ data: { authenticated: false } });
   }
 
-  // Also return the session token so the client can store it for
-  // Authorization header fallback (cross-origin sandbox environments)
-  const token = getSessionToken(request);
+  const [user, profile] = await Promise.all([
+    db.user.findUnique({ where: { id: session.userId }, select: { id: true, email: true } }),
+    db.profile.findUnique({ where: { userId: session.userId }, select: { id: true } }),
+  ]);
 
-  // Check if user needs onboarding (has no profile)
-  const profile = await db.profile.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
+  if (!user) {
+    // Session row outlived its user — treat as unauthenticated.
+    return NextResponse.json({ data: { authenticated: false } });
+  }
 
   return NextResponse.json({
-    authenticated: true,
-    userId,
-    token: token || undefined,
-    needsOnboarding: !profile,
+    data: {
+      authenticated: true,
+      user: { id: user.id, email: user.email },
+      needsOnboarding: profile === null,
+    },
   });
 }

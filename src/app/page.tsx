@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Heart, User, LogOut, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Sparkles,
+  Heart, LogOut, Loader2, Mail, Lock, Eye, EyeOff, UserPlus, ArrowLeft, Sparkles,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useProfileStore } from '@/stores/profile-store';
@@ -21,9 +21,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
  * profile. Discovery, matching, messaging, notifications and engagement were
  * removed under Option A (D40) and are rebuilt in their owning phases.
  *
- * NOTE — transitional. This is still a Client Component using the legacy
- * client-side auth store. Phase 1 Milestone 4 replaces it with Server
- * Components and cookie-session validation per D37 / AUTHENTICATION.md.
+ * Authentication (M4, D37): this component makes NO authentication decision.
+ * It renders whatever the server last reported through /api/auth/session. The
+ * session lives in an HTTP-only cookie the client cannot read, and every
+ * protected endpoint re-validates it server-side. There is no hydration gate,
+ * no readiness flag and no client-held token — swapping the store's `user`
+ * field in a browser console changes what is drawn and nothing else.
  */
 
 type AuthView = 'login' | 'register';
@@ -40,7 +43,7 @@ function AnimatedBackground() {
   );
 }
 
-function HydrationLoader() {
+function SessionLoader() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <AnimatedBackground />
@@ -68,14 +71,14 @@ function HydrationLoader() {
 }
 
 function AuthScreen() {
-  const { login, register, isLoading, error, clearError } = useAuthStore();
+  const { login, register, isSubmitting, error, clearError } = useAuthStore();
   const [view, setView] = useState<AuthView>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
 
+  const isLoading = isSubmitting;
   const displayError = localError || error;
 
   const handleSubmit = useCallback(
@@ -83,10 +86,6 @@ function AuthScreen() {
       e.preventDefault();
       setLocalError(null);
 
-      if (view === 'register' && !name.trim()) {
-        setLocalError('Name is required');
-        return;
-      }
       if (!email.trim()) {
         setLocalError('Email is required');
         return;
@@ -96,13 +95,15 @@ function AuthScreen() {
         return;
       }
 
+      // The server is the authority on the outcome; these calls only update
+      // what the UI renders. The session itself lives in the HTTP-only cookie.
       if (view === 'login') {
         await login(email.trim(), password);
       } else {
-        await register(email.trim(), password, name.trim());
+        await register(email.trim(), password);
       }
     },
-    [view, name, email, password, login, register],
+    [view, email, password, login, register],
   );
 
   const switchView = useCallback(
@@ -143,33 +144,10 @@ function AuthScreen() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <AnimatePresence>
-                  {view === 'register' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                    >
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Name</Label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          <Input
-                            id="name"
-                            type="text"
-                            placeholder="Your name"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="pl-10 h-11"
-                            autoComplete="name"
-                            disabled={isLoading}
-                          />
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
+                {/* Display name is collected during onboarding, not at
+                    registration: the V2 `users` table holds credentials only
+                    and the name lives on `profiles.displayName`
+                    (BACKEND-SCHEMA.md §2). */}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
@@ -277,7 +255,8 @@ const AVAILABLE_INTERESTS = [
 ];
 
 function OnboardingScreen() {
-  const { userId } = useAuthStore();
+  const { user } = useAuthStore();
+  const userId = user?.id;
   const { fetchProfile } = useProfileStore();
   const [step, setStep] = useState<'gender' | 'details' | 'interests'>('gender');
   const [isSaving, setIsSaving] = useState(false);
@@ -310,14 +289,12 @@ function OnboardingScreen() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
-        requireAuth: true,
       });
       if (!res.ok && res.status === 409) {
         await apiFetch('/api/profile', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
-          requireAuth: true,
         });
       }
       await fetchProfile(userId);
@@ -490,25 +467,17 @@ function OnboardingScreen() {
 }
 
 export default function Home() {
-  const { userId, isAuthenticated, isLoading, needsOnboarding, hasHydrated, setAuth, logout, checkSession } =
-    useAuthStore();
-  const { fetchProfile, profile, isLoading: isProfileLoading } = useProfileStore();
+  const { user, needsOnboarding, isChecking, logout, checkSession } = useAuthStore();
   const initRef = useRef(false);
 
+  // Ask the server once on mount who we are. There is no hydration gate and
+  // no readiness flag — the cookie is sent automatically and the server
+  // answers (D37). `isChecking` only drives a spinner.
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
     void checkSession();
   }, [checkSession]);
-
-  useEffect(() => {
-    if (!userId || !hasHydrated || !isAuthenticated) return;
-    void fetchProfile(userId);
-  }, [userId, hasHydrated, isAuthenticated, fetchProfile]);
-
-  useEffect(() => {
-    if (profile && needsOnboarding) setAuth(userId, false);
-  }, [profile, needsOnboarding, userId, setAuth]);
 
   const handleLogout = useCallback(async () => {
     useProfileStore.getState().setProfile(null);
@@ -516,12 +485,13 @@ export default function Home() {
     initRef.current = false;
   }, [logout]);
 
-  if (!hasHydrated || isLoading) return <HydrationLoader />;
-  if (!isAuthenticated || !userId) return <AuthScreen />;
+  if (isChecking) return <SessionLoader />;
 
-  const showOnboarding =
-    !isProfileLoading && (needsOnboarding || (hasHydrated && profile === null && !isLoading));
-  if (showOnboarding) return <OnboardingScreen />;
+  // Rendering decision only. Every protected resource is refused by the
+  // server independently of what is rendered here.
+  if (!user) return <AuthScreen />;
+
+  if (needsOnboarding) return <OnboardingScreen />;
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -542,7 +512,7 @@ export default function Home() {
       </header>
 
       <main className="flex-1 min-h-0 overflow-y-auto">
-        <ProfileEditor userId={userId} />
+        <ProfileEditor userId={user.id} />
       </main>
     </div>
   );

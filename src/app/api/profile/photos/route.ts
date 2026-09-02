@@ -38,9 +38,9 @@ function sanitizeFilename(filename: string): string {
 export async function POST(request: NextRequest) {
   try {
     // ✅ Auth: Get userId from session
-    const authResult = requireAuth(request);
+    const authResult = await requireAuth(request);
     if (authResult instanceof NextResponse) return authResult; // 401
-    const userId = authResult; // AUTHENTICATED user
+    const { userId } = authResult; // From the server session only (D37)
 
     const formData = await request.formData();
     // ⚠️ Ignore userId from form data — session userId is authoritative
@@ -138,9 +138,9 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     // ✅ Auth: Get userId from session
-    const authResult = requireAuth(request);
+    const authResult = await requireAuth(request);
     if (authResult instanceof NextResponse) return authResult; // 401
-    const userId = authResult; // AUTHENTICATED user
+    const { userId } = authResult; // From the server session only (D37)
 
     const { searchParams } = new URL(request.url);
     const photoId = searchParams.get('photoId');

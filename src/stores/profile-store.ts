@@ -108,7 +108,7 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       // ✅ GET is allowed with userId param (public profile view)
-      const res = await apiFetch(`/api/profile?userId=${userId}`, { requireAuth: true });
+      const res = await apiFetch(`/api/profile?userId=${userId}`);
       if (!res.ok) {
         // Safely parse error — server might be down and Caddy returns HTML
         let errorMsg = 'Failed to fetch profile';

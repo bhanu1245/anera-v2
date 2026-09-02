@@ -1,81 +1,99 @@
 import { create } from 'zustand';
-import {
-  apiFetch,
-  setStoredToken,
-  clearStoredToken,
-  onUnauthorized,
-  markAuthReady,
-  clearAuthReady,
-} from '@/lib/api-client';
+import { apiFetch, onUnauthorized } from '@/lib/api-client';
+
+/**
+ * Anera V2 — authentication UI state.
+ *
+ * Authority: docs/DECISIONS.md D37, D36 (Zustand is UI state only),
+ *            docs/AUTHENTICATION.md §2.
+ *
+ * THIS STORE IS NOT AN AUTHENTICATION AUTHORITY.
+ *
+ * It caches, for rendering only, what the server most recently reported.
+ * Every protected operation is decided server-side against the session
+ * cookie; nothing here can grant access. Mutating this store cannot
+ * authenticate anyone.
+ *
+ * Deliberately absent (D37 §2): no token storage, no `hasHydrated` gate,
+ * no `authReady`, no `waitForAuth`, no retry loop. `isChecking` below is a
+ * spinner flag — it gates a loading indicator, never a security decision.
+ */
+
+export interface AuthUser {
+  id: string;
+  email: string;
+}
 
 interface AuthState {
-  userId: string | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
+  /** Last state reported by the server. `null` = not yet asked. */
+  user: AuthUser | null;
   needsOnboarding: boolean;
+  /** UI-only: a session check is in flight. Never an authorization input. */
+  isChecking: boolean;
+  /** UI-only: a login/register request is in flight. */
+  isSubmitting: boolean;
   error: string | null;
 
-  /** Whether the initial session check has completed (hydration guard) */
-  hasHydrated: boolean;
-
-  /** Whether a session check is in progress right now */
-  isCheckingSession: boolean;
-
-  // Actions
-  setAuth: (userId: string | null, needsOnboarding?: boolean) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
   clearError: () => void;
-  login: (email: string, password: string) => Promise<string | null>;
-  register: (email: string, password: string, name: string) => Promise<string | null>;
+  checkSession: () => Promise<void>;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  checkSession: () => Promise<string | null>;
-  /** Full reset of auth state — used during logout to ensure clean slate */
-  resetAuth: () => void;
+}
+
+interface SessionPayload {
+  data: {
+    authenticated: boolean;
+    user?: AuthUser;
+    needsOnboarding?: boolean;
+  };
+}
+
+interface CredentialPayload {
+  data: { user: AuthUser; needsOnboarding: boolean };
+}
+
+async function readError(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json();
+    return body?.error?.message ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  userId: null,
-  isAuthenticated: false,
-  isLoading: true, // Start true so UI shows loading until first checkSession completes
+  user: null,
   needsOnboarding: false,
+  isChecking: true,
+  isSubmitting: false,
   error: null,
-  hasHydrated: false,  // Not hydrated until checkSession finishes
-  isCheckingSession: false,
 
-  setAuth: (userId, needsOnboarding = false) => {
-    set({
-      userId,
-      isAuthenticated: !!userId,
-      isLoading: false,
-      needsOnboarding,
-      error: null,
-      hasHydrated: true,
-    });
-  },
-
-  setLoading: (isLoading) => set({ isLoading }),
-  setError: (error) => set({ error, isLoading: false }),
   clearError: () => set({ error: null }),
 
-  resetAuth: () => {
-    set({
-      userId: null,
-      isAuthenticated: false,
-      isLoading: false,
-      needsOnboarding: false,
-      error: null,
-      hasHydrated: false,
-      isCheckingSession: false,
-    });
-    clearAuthReady();
+  /** Asks the server who we are. The server's answer is the only answer. */
+  checkSession: async () => {
+    set({ isChecking: true });
+    try {
+      const res = await apiFetch('/api/auth/session', { skipAuthRefresh: true });
+      if (!res.ok) {
+        set({ user: null, needsOnboarding: false, isChecking: false });
+        return;
+      }
+      const body = (await res.json()) as SessionPayload;
+      set({
+        user: body.data.authenticated ? (body.data.user ?? null) : null,
+        needsOnboarding: body.data.needsOnboarding ?? false,
+        isChecking: false,
+      });
+    } catch {
+      set({ user: null, needsOnboarding: false, isChecking: false });
+    }
   },
 
-  login: async (email: string, password: string) => {
-    set({ isLoading: true, error: null });
+  login: async (email, password) => {
+    set({ isSubmitting: true, error: null });
     try {
-      console.log('[AUTH] Login attempt:', email);
-
       const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -84,267 +102,65 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
 
       if (!res.ok) {
-        let errorMsg = 'Invalid email or password';
-        try {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            errorMsg = data.error || errorMsg;
-          }
-        } catch {
-          // Ignore JSON parse errors
-        }
-        throw new Error(errorMsg);
+        set({ error: await readError(res, 'Sign in failed.'), isSubmitting: false });
+        return false;
       }
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error('Server returned an unexpected response. Please try again.');
-      }
-
-      const data = await res.json();
-
-      // Store token FIRST — this is critical for subsequent API calls
-      if (data.token) {
-        setStoredToken(data.token);
-      }
-
-      // Verify session is actually established by calling checkSession
-      console.log('[AUTH] Login response received, verifying session...');
-      const verifiedUserId = await get().checkSession();
-
-      if (verifiedUserId) {
-        console.log('[AUTH] Session verified after login, userId:', verifiedUserId);
-        // Mark auth as ready so protected API calls can proceed
-        markAuthReady();
-        // Return the userId — page.tsx will use this to redirect
-        return verifiedUserId;
-      } else {
-        // Session verification failed — but login succeeded, use login data
-        console.warn('[AUTH] Session verification failed after login, using login data');
-        set({
-          userId: data.userId,
-          isAuthenticated: true,
-          isLoading: false,
-          needsOnboarding: data.needsOnboarding || false,
-          error: null,
-          hasHydrated: true,
-        });
-        markAuthReady();
-        return data.userId;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Login failed';
-      console.error('[AUTH] Login failed:', msg);
-      if (msg.includes('Unexpected token') || msg.includes('is not valid JSON')) {
-        set({
-          error: 'Unable to connect to server. Please refresh the page.',
-          isLoading: false,
-          isAuthenticated: false,
-          userId: null,
-        });
-        return null;
-      }
+      // The response carries no session material — the cookie is already set.
+      const body = (await res.json()) as CredentialPayload;
       set({
-        error: msg,
-        isLoading: false,
-        isAuthenticated: false,
-        userId: null,
+        user: body.data.user,
+        needsOnboarding: body.data.needsOnboarding,
+        isSubmitting: false,
+        isChecking: false,
       });
-      return null;
+      return true;
+    } catch {
+      set({ error: 'Unable to reach the server. Please try again.', isSubmitting: false });
+      return false;
     }
   },
 
-  register: async (email: string, password: string, name: string) => {
-    set({ isLoading: true, error: null });
+  register: async (email, password) => {
+    set({ isSubmitting: true, error: null });
     try {
-      console.log('[AUTH] Register attempt:', email);
-
       const res = await apiFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
+        body: JSON.stringify({ email, password }),
         skipAuthRefresh: true,
       });
 
       if (!res.ok) {
-        let errorMsg = 'Registration failed';
-        try {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            errorMsg = data.error || errorMsg;
-          }
-        } catch {
-          // Ignore JSON parse errors
-        }
-        throw new Error(errorMsg);
+        set({ error: await readError(res, 'Registration failed.'), isSubmitting: false });
+        return false;
       }
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error('Server returned an unexpected response. Please try again.');
-      }
-
-      const data = await res.json();
-
-      // Store token FIRST
-      if (data.token) {
-        setStoredToken(data.token);
-      }
-
-      // Verify session
-      console.log('[AUTH] Register response received, verifying session...');
-      const verifiedUserId = await get().checkSession();
-
-      if (verifiedUserId) {
-        console.log('[AUTH] Session verified after register, userId:', verifiedUserId);
-        markAuthReady();
-        return verifiedUserId;
-      } else {
-        console.warn('[AUTH] Session verification failed after register, using register data');
-        set({
-          userId: data.userId,
-          isAuthenticated: true,
-          isLoading: false,
-          needsOnboarding: data.needsOnboarding || true,
-          error: null,
-          hasHydrated: true,
-        });
-        markAuthReady();
-        return data.userId;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Registration failed';
-      console.error('[AUTH] Register failed:', msg);
-      if (msg.includes('Unexpected token') || msg.includes('is not valid JSON')) {
-        set({
-          error: 'Unable to connect to server. Please refresh the page.',
-          isLoading: false,
-          isAuthenticated: false,
-          userId: null,
-        });
-        return null;
-      }
+      const body = (await res.json()) as CredentialPayload;
       set({
-        error: msg,
-        isLoading: false,
-        isAuthenticated: false,
-        userId: null,
+        user: body.data.user,
+        needsOnboarding: body.data.needsOnboarding,
+        isSubmitting: false,
+        isChecking: false,
       });
-      return null;
+      return true;
+    } catch {
+      set({ error: 'Unable to reach the server. Please try again.', isSubmitting: false });
+      return false;
     }
   },
-
 
   logout: async () => {
-    console.log('[AUTH] Logging out...');
-    try {
-      await apiFetch('/api/auth/logout', {
-        method: 'POST',
-        skipAuthRefresh: true,
-      });
-    } catch {
-      // Ignore logout errors
-    }
-    clearStoredToken();
-    clearAuthReady();
-    set({
-      userId: null,
-      isAuthenticated: false,
-      isLoading: false,
-      needsOnboarding: false,
-      error: null,
-      hasHydrated: false,
-      isCheckingSession: false,
+    // The server revokes the session row; clearing local state is cosmetic.
+    await apiFetch('/api/auth/logout', { method: 'POST', skipAuthRefresh: true }).catch(() => {
+      // Even on failure the local view resets; the server session is
+      // authoritative and any surviving session is caught on next request.
     });
-    console.log('[AUTH] Logout complete — auth state cleared');
-  },
-
-  checkSession: async () => {
-    // Prevent concurrent session checks
-    if (get().isCheckingSession) {
-      console.log('[AUTH] Session check already in progress, skipping');
-      return null;
-    }
-
-    set({ isLoading: true, isCheckingSession: true });
-    try {
-      const res = await apiFetch('/api/auth/session', {
-        skipAuthRefresh: true,
-      });
-      if (!res.ok) {
-        console.log('[AUTH] Session check failed — not authenticated');
-        set({
-          isAuthenticated: false,
-          userId: null,
-          isLoading: false,
-          hasHydrated: true,
-          isCheckingSession: false,
-        });
-        return null;
-      }
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        console.log('[AUTH] Session check — non-JSON response');
-        set({
-          isAuthenticated: false,
-          userId: null,
-          isLoading: false,
-          hasHydrated: true,
-          isCheckingSession: false,
-        });
-        return null;
-      }
-      const data = await res.json();
-      if (data.authenticated && data.userId) {
-        console.log('[AUTH] Session restored — userId:', data.userId);
-        set({
-          userId: data.userId,
-          isAuthenticated: true,
-          isLoading: false,
-          needsOnboarding: data.needsOnboarding || false,
-          hasHydrated: true,
-          isCheckingSession: false,
-        });
-
-        // Refresh the stored token so subsequent API calls have it
-        if (data.token) {
-          setStoredToken(data.token);
-        }
-
-        // Mark auth as ready for protected API calls
-        markAuthReady();
-
-        return data.userId;
-      } else {
-        console.log('[AUTH] Session check — not authenticated');
-        set({
-          userId: null,
-          isAuthenticated: false,
-          isLoading: false,
-          hasHydrated: true,
-          isCheckingSession: false,
-        });
-        return null;
-      }
-    } catch (err) {
-      console.error('[AUTH] Session check error:', err);
-      set({
-        userId: null,
-        isAuthenticated: false,
-        isLoading: false,
-        hasHydrated: true,
-        isCheckingSession: false,
-      });
-      return null;
-    }
+    set({ user: null, needsOnboarding: false, error: null, isChecking: false });
   },
 }));
 
-// Register the global 401 handler
+// A 401 anywhere means the server no longer recognises us — reflect that.
 onUnauthorized(() => {
-  console.log('[AUTH] 401 received — clearing auth state');
-  useAuthStore.getState().setAuth(null);
-  clearAuthReady();
+  useAuthStore.setState({ user: null, needsOnboarding: false, isChecking: false });
 });

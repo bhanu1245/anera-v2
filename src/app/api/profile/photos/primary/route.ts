@@ -7,9 +7,9 @@ import { requireAuth } from '@/lib/auth';
 export async function PUT(request: NextRequest) {
   try {
     // ✅ Auth: Get userId from session
-    const authResult = requireAuth(request);
+    const authResult = await requireAuth(request);
     if (authResult instanceof NextResponse) return authResult; // 401
-    const userId = authResult; // AUTHENTICATED user
+    const { userId } = authResult; // From the server session only (D37)
 
     const body = await request.json();
     // ⚠️ Ignore userId in body — session userId is authoritative
