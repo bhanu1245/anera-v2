@@ -21,6 +21,8 @@ export default defineConfig({
       'tests/integration/**/*.test.ts',
     ],
     exclude: ['tests/e2e/**', 'node_modules/**', '.next/**'],
+    // Loads DATABASE_URL from .env locally; CI supplies it via the workflow.
+    setupFiles: ['tests/setup/env.ts'],
     // Integration tests touch a real database; keep them serial to avoid
     // cross-test interference on shared tables.
     fileParallelism: false,

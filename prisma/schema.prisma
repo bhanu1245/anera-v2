@@ -1,41 +1,97 @@
+// Anera V2 — Phase 1 foundation schema.
+//
+// Authority: docs/BACKEND-SCHEMA.md §2 (foundation tables), docs/DECISIONS.md
+//            D36 (PostgreSQL + Prisma), D37 (database-backed sessions),
+//            D28 (foreign keys required for reliable erasure).
+//
+// SCOPE: Phase 1 only. BACKEND-SCHEMA.md §2 rule 3 — "Do not create
+// future-phase tables in the Phase 1 migration." Phase 2 tables (swipes,
+// matches, blocks) and later tables are created by their owning phase.
+//
+// Every relation carries a real foreign key with explicit cascade behaviour.
+// The MVP had foreign keys on only 2 of 10 models, which made account
+// deletion unreliable (IG-12) and blocked D28.
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+/// Account identity and credentials.
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String?  // null for demo/seed users, required for real accounts
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  profile      Profile?
+  id              String    @id @default(cuid())
+  email           String    @unique
+  /// D37: bcrypt hash. NOT NULL in V2 — the MVP's nullable-password
+  /// demo/seed accounts are DEPRECATED (IG-67).
+  passwordHash    String
+  emailVerifiedAt DateTime?
+  /// Account lifecycle state. The enforcement ladder and its full value set
+  /// are Phase 4 / OQ-TS08; Phase 1 uses only "active".
+  status          String    @default("active")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  sessions    Session[]
+  profile     Profile?
+  preferences Preferences?
+
+  @@index([status])
+  @@map("users")
 }
 
-model Profile {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  name              String
-  age               Int
-  gender            String   // "male", "female", "non-binary", "other"
-  bio               String   @default("")
-  interests         String   @default("[]") // JSON array stored as string
-  city              String   @default("")
-  relationshipIntent String  @default("") // "casual", "serious", "networking", "friendship", "not-sure"
-  isOnboarded       Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  photos            Photo[]
+/// D37: server-side session. The HTTP-only cookie carries only the session
+/// id; validity is decided here on every protected request. Deleting the row
+/// revokes the session immediately — replacing the MVP's in-memory blocklist,
+/// which was lost on every restart (IG-70).
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Public-facing profile.
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  displayName String
+  /// Replaces the MVP's stored `age` integer, which was wrong the day after
+  /// it was written. Age is derived, never stored (BACKEND-SCHEMA.md §2.1).
+  birthDate   DateTime
+  /// String, not a Prisma enum: the gender and intent value sets are
+  /// unratified (OQ-B07, OQ-P01). Validation lives in the application layer
+  /// until those are decided.
+  gender      String
+  bio         String   @default("")
+  /// Free-text locality only. The location model — coordinates, precision and
+  /// obfuscation — is OQ-B05 and is decided before Phase 2 discovery.
+  city        String   @default("")
+  intent      String   @default("")
+  isOnboarded Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos    Photo[]
+  interests ProfileInterest[]
+
+  @@index([city])
   @@map("profiles")
 }
 
+/// Profile photo. Media storage architecture is OQ-A03; `url` holds whatever
+/// the chosen store returns. Local-disk serving (IG-18) is DEPRECATED.
 model Photo {
   id        String   @id @default(cuid())
   profileId String
@@ -43,114 +99,45 @@ model Photo {
   order     Int      @default(0)
   isPrimary Boolean  @default(false)
   createdAt DateTime @default(now())
-  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
   @@map("photos")
 }
 
-model Swipe {
-  id         String   @id @default(cuid())
-  fromUserId String   // The user who swiped
-  toUserId   String   // The user being swiped on
-  action     String   // "like", "pass", "superlike"
-  createdAt  DateTime @default(now())
-
-  // Prevent duplicate swipes: one user can only swipe on another once
-  @@unique([fromUserId, toUserId])
-  @@index([fromUserId])
-  @@index([toUserId])
-  @@index([fromUserId, action])
-  @@map("swipes")
-}
-
-model Match {
-  id        String   @id @default(cuid())
-  user1Id   String   // Lower userId alphabetically (for uniqueness)
-  user2Id   String   // Higher userId alphabetically
+/// Normalised interests. Replaces the MVP's JSON-string column, which was
+/// unqueryable and a parse-failure risk (BACKEND-SCHEMA.md §2.1).
+model ProfileInterest {
+  profileId String
+  interest  String
   createdAt DateTime @default(now())
 
-  // Prevent duplicate matches
-  @@unique([user1Id, user2Id])
-  @@index([user1Id])
-  @@index([user2Id])
-  @@map("matches")
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([profileId, interest])
+  @@index([profileId])
+  @@map("profile_interests")
 }
 
-// ─── Notification System ────────────────────────────────────────────────────
+/// Discovery preferences. New in V2 — the MVP had no preference model, which
+/// is why every user was shown to every other user regardless of gender or
+/// preference (IG-16). Consumed by Phase 2 discovery.
+model Preferences {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  minAge           Int      @default(18)
+  maxAge           Int      @default(120)
+  /// String, not an enum — see Profile.gender.
+  genderPreference String   @default("")
+  /// Inert until the location model is decided (OQ-B05). Nullable so Phase 1
+  /// neither invents a distance semantic nor blocks on one.
+  maxDistanceKm    Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-model Notification {
-  id         String   @id @default(cuid())
-  userId     String   // Recipient
-  type       String   // "new_match" | "new_message" | "someone_liked" | "superlike_received" | "profile_viewed" | "boost_expired" | "streak_reminder" | "profile_incomplete" | "people_waiting"
-  title      String
-  body       String
-  isRead     Boolean  @default(false)
-  // Related entity (polymorphic)
-  fromUserId String?  // Who triggered this notification (null for system)
-  entityId   String?  // ID of related entity (matchId, messageId, etc.)
-  entityType String?  // "match" | "message" | "profile" | "streak" | "boost"
-  imageUrl   String?  // Avatar/image for the notification
-  createdAt  DateTime @default(now())
-  readAt     DateTime?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, isRead])
-  @@index([userId, createdAt])
-  @@map("notifications")
-}
-
-// ─── Push Notification Architecture ─────────────────────────────────────────
-
-model DeviceToken {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   // FCM device token
-  platform  String   // "ios" | "android" | "web"
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, token])
-  @@index([userId])
-  @@map("device_tokens")
-}
-
-// ─── Messaging System ──────────────────────────────────────────────────────
-
-model Message {
-  id         String   @id @default(cuid())
-  matchId    String   // Which match/chat this belongs to
-  senderId   String   // Who sent the message
-  content    String   // Message text
-  isRead     Boolean  @default(false)
-  createdAt  DateTime @default(now())
-
-  @@index([matchId, createdAt])
-  @@index([matchId])
-  @@index([senderId])
-  @@map("messages")
-}
-
-// ─── Engagement System ──────────────────────────────────────────────────────
-
-model UserStreak {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  currentStreak Int     @default(0)
-  longestStreak Int     @default(0)
-  lastActiveDate String // ISO date string of last active day (YYYY-MM-DD)
-  updatedAt    DateTime @updatedAt
-
-  @@map("user_streaks")
-}
-
-model EngagementAction {
-  id         String   @id @default(cuid())
-  userId     String
-  action     String   // "swipe" | "match" | "message" | "profile_view" | "login"
-  createdAt  DateTime @default(now())
-
-  @@index([userId, action])
-  @@index([userId, createdAt])
-  @@map("engagement_actions")
+  @@map("preferences")
 }
