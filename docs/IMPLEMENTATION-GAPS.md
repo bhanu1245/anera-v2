@@ -6,7 +6,7 @@
 | **Status** | **REFERENCE** — a register of verified findings. It approves nothing and requires nothing on its own. |
 | **Authority** | Derived from the repository audit in [`00-MASTER-SPECIFICATION.md`](00-MASTER-SPECIFICATION.md) (2026-08-30) and the approved decisions in [`DECISIONS.md`](DECISIONS.md) (2026-09-01). |
 | **Purpose** | The single register of every place where the current implementation conflicts with, or falls short of, an approved decision — or is otherwise technical debt. |
-| **Last updated** | 2026-09-03 — Phase 1 M4 authentication (§9.6); `IG-01`, `IG-02`, `IG-63`, `IG-65`, `IG-66`, `IG-70`, `IG-74` closed |
+| **Last updated** | 2026-09-03 — Phase 1 M4 authentication (§9.6); `IG-01`, `IG-02`, `IG-63`, `IG-65`, `IG-66`, `IG-70`, `IG-74` closed. `IG-77` added during M5 inspection. |
 | **Gaps recorded** | 76 |
 
 ---
@@ -65,7 +65,9 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | UNRESOLVED | 1 |
 | **Total** | **76** |
 
-> Gap IDs are labels, not a contiguous sequence. The highest id in use is `IG-76`; some numbers in the range are unused.
+> Gap IDs are labels, not a contiguous sequence. The highest id in use is `IG-77`; some numbers in the range are unused.
+>
+> `IG-77` was found during M5 inspection on 2026-09-03 and is **not** part of the 2026-08-30 audit, so it is excluded from the counts above, which record that audit.
 
 **`IG-01` was the single blocking item** — the authentication conflict. Decisions 16–35 did **not** resolve it; **Decision 37** did, and Phase 1 Milestone 4 implemented it. Closed 2026-09-03 (§9.6).
 
@@ -174,6 +176,7 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | **IG-69** | Security | No security headers configured — no CSP, HSTS, X-Frame-Options, X-Content-Type-Options | Security posture; D30 security gates | Standard hardening absent | TECHNICAL DEBT | Header policy decision | D30 | `OPEN — AWAITING PHASE` | `SEC-11` |
 | **IG-71** | Authentication | No password reset, no email verification, no session listing or revocation UI | D34 progressive verification (email); standing security posture | Absent | IMPLEMENTATION GAP | Account recovery decisions | D34, `OD-08` | `OPEN — BLOCKED` | `AUTH-07` |
 | **IG-72** | Repository hygiene | `public/` contains a duplicated nested `public/public/` directory with `logo.svg` and `robots.txt` | — | Duplicated assets | TECHNICAL DEBT | Clean up | — | `OPEN — AWAITING PHASE` | `TI-11` |
+| **IG-77** | API / Architecture | The authentication forms submit with a client `fetch` to the `/api/auth/*` route handlers | [`API-SPECIFICATION.md`](API-SPECIFICATION.md) §2 marks **"Server Actions for form mutations"** as `SELECTED` | The implemented form-mutation style is not the selected one | TECHNICAL DEBT | Either adopt Server Actions for form mutations or record a decision superseding the `SELECTED` style. The route handlers themselves are frozen, tested and CI-verified (M4), so this is a question of what the *forms* call, not of the endpoints' correctness | D37 (auth transport, unaffected either way) | `OPEN — AWAITING PHASE` | Found during M5 inspection, 2026-09-03 |
 
 ---
 
