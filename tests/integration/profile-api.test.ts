@@ -420,6 +420,12 @@ describe('age floor', () => {
   });
 
   it('rejects malformed and impossible dates', async () => {
+    // One account for all of them. Every attempt is rejected, so no profile is
+    // ever created and each subsequent POST still reaches validation rather
+    // than the 409 path. Registering eight accounts instead would pay
+    // bcrypt at cost 12 eight times over for no extra coverage.
+    const account = await newAccount();
+
     for (const value of [
       'not-a-date',
       '1990-13-01', // month 13
@@ -430,10 +436,11 @@ describe('age floor', () => {
       12345,
       null,
     ]) {
-      const account = await newAccount();
       const res = await create(account, { birthDate: value });
       expect(res.status, `expected 400 for birthDate=${JSON.stringify(value)}`).toBe(400);
     }
+
+    expect(await db.profile.findUnique({ where: { userId: account.userId } })).toBeNull();
   });
 
   it('rejects an implausibly old date', async () => {
