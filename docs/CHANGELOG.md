@@ -12,6 +12,38 @@
 
 ---
 
+## 2026-09-03 — Phase 1 Milestone 5: real routing
+
+The single-page client shell was replaced with App Router routes and server-resolved sessions, delivering the `Frontend` half of Phase 1: *"Server Components by default. Real routing — retire the single-page tab shell."*
+
+### Scope decision
+
+`ROADMAP.md`'s M5 row — signup, login, logout, protected routes — had already been delivered inside M4, whose gate required exactly those. The product owner scoped M5 instead to the routing requirement, and approved the route structure on 2026-09-03. No document was reinterpreted silently; the roadmap now records both readings.
+
+### What changed
+
+`src/app/page.tsx` was the entire application: a `'use client'` component holding every screen, switching between them with React state, asking the server "who am I?" from a `useEffect`, and showing a spinner while it waited. It is now a Server Component that answers the flow's two questions — session valid, then onboarded (`02-APP-FLOW.md` §2.1) — before anything renders.
+
+Routes: `/`, `/login`, `/signup`, `/onboarding`, `/profile`. The `(auth)` and `(app)` route groups carry the guards, which call the existing `getCurrentSession()` — the same PostgreSQL-backed authority the API routes use. No second authentication authority was introduced, and `src/lib/auth/**` was not modified.
+
+The guards are in layouts rather than in `proxy.ts` deliberately: middleware runs before a Prisma session lookup is possible, so a gate there would mean either a second authority or a weaker cookie-presence check.
+
+### Tests
+
+Eight new routing tests (`tests/e2e/routing.spec.ts`), including `TESTING-STRATEGY.md` §4.2 #8's **redirect branch** — *"401 or redirect, never protected content, never a partial render"* — which was unsatisfiable before M5 because there were no page routes to redirect between. It is written as a differential test: it first proves an authenticated request to the same URL does return the protected markup, so its absence for an anonymous client is meaningful rather than incidental.
+
+§4.2 #6 was also strengthened: a session is now shown to carry across genuinely separate documents and a new tab, where before it only crossed one page's state.
+
+### Not done, deliberately
+
+`/api/profile` remains absent — it is M6. Onboarding was **relocated byte-identically** on the product owner's instruction and still cannot complete. It was equally unable to inside the shell; M5 moved it without fixing or disguising it.
+
+### Documentation
+
+`ROADMAP.md`'s Phase 1 status was stale to the point of being false — it recorded M3 as blocked on an unavailable PostgreSQL and M4–M7 as not started. Corrected. `IG-77` was added during inspection, recording that the auth forms use client `fetch` while `API-SPECIFICATION.md` §2 marks Server Actions as `SELECTED`; the frozen M4 route handlers were kept, per the product owner.
+
+---
+
 ## 2026-09-03 — Phase 1 Milestone 4: authentication replaced
 
 The legacy authentication architecture was replaced with the D37 architecture. No decision was changed; D37 was implemented as written.

@@ -6,7 +6,7 @@
 | **Status** | **REFERENCE** — a register of verified findings. It approves nothing and requires nothing on its own. |
 | **Authority** | Derived from the repository audit in [`00-MASTER-SPECIFICATION.md`](00-MASTER-SPECIFICATION.md) (2026-08-30) and the approved decisions in [`DECISIONS.md`](DECISIONS.md) (2026-09-01). |
 | **Purpose** | The single register of every place where the current implementation conflicts with, or falls short of, an approved decision — or is otherwise technical debt. |
-| **Last updated** | 2026-09-03 — Phase 1 M4 authentication (§9.6); `IG-01`, `IG-02`, `IG-63`, `IG-65`, `IG-66`, `IG-70`, `IG-74` closed. `IG-77` added during M5 inspection. |
+| **Last updated** | 2026-09-03 — Phase 1 M5 routing (§9.7). M4 closed `IG-01`, `IG-02`, `IG-63`, `IG-65`, `IG-66`, `IG-70`, `IG-74` (§9.6); `IG-77` added during M5 inspection. |
 | **Gaps recorded** | 76 |
 
 ---
@@ -281,6 +281,22 @@ The legacy authentication architecture was **replaced**, not refactored (D40 ste
 **Fixed on discovery.** The login endpoint skipped the password comparison entirely when the email was unknown, so it answered "no such account" measurably faster than "wrong password" — enumerating accounts by timing despite an identical response body. It now always performs a bcrypt comparison, against a fixed hash when there is no user.
 
 **Known limitation.** Rate limiting is an in-process fixed-window counter (`src/lib/auth/rate-limit.ts`). It satisfies the Phase 1 requirement on a single instance but does not survive a restart or coordinate across instances, and its client key comes from `x-forwarded-for`, which is only trustworthy behind a proxy that overwrites it. A shared store and trusted-proxy configuration are required before multi-instance deployment (`OQ-A01`, `OQ-B04`).
+
+---
+
+### 9.7 Milestone 5 — routing (2026-09-03)
+
+The single-page client shell was replaced with App Router routes and server-resolved sessions.
+
+| Gap | Status |
+|---|---|
+| `IG-77` | **Still open** — recorded during M5 inspection. The auth forms use client `fetch` while `API-SPECIFICATION.md` §2 marks Server Actions as `SELECTED`. The product owner directed that the frozen M4 route handlers be kept, so this awaits a later milestone |
+
+**Architectural debt retired, not previously registered.** `00-MASTER-SPECIFICATION.md` §380 recorded that *"the entire authenticated app is a single client-side route (`src/app/page.tsx`)... There is no URL-based routing for these views, and no deep linking."* That is no longer true: there are five routes, each server-rendered on demand, each deep-linkable, with session guards that run before render. `SYSTEM-ARCHITECTURE.md`'s migration row *"Client-side app shell holding everything → Server Components + real routing"* is satisfied.
+
+**Known limitation carried into M6.** Onboarding reads the acting user's id from the client store, which is no longer populated on a hard page load now that nothing calls `checkSession` on mount. The correct fix is to pass the id from the server page, which already holds it — but that means editing a component the product owner instructed be relocated unchanged, so it is **not** being decided here. It is currently unobservable: onboarding cannot submit at all until `/api/profile` exists (M6), and M6 must touch that submit path regardless.
+
+**Still outstanding for the Phase 1 exit criteria.** `IG-21` is only half closed: test tooling, CI and `typescript.ignoreBuildErrors` are done, but **28 ESLint rules remain disabled** in `eslint.config.mjs` — including `react-hooks/exhaustive-deps`, `no-unused-vars`, `no-undef` and `no-unreachable` — while the Phase 1 exit criteria require *"ESLint rules re-enabled"*. Every `lint: PASS` reported so far is accurate but weaker than that criterion. This work is unassigned to a milestone and needs one before Phase 1 can freeze.
 
 ---
 

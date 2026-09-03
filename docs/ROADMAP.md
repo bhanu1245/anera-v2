@@ -3,12 +3,12 @@
 | Field | Value |
 |---|---|
 | **Purpose** | The approved phase plan for Anera V2. |
-| **Status** | **APPROVED** — Phase 0 ❄️ FROZEN 2026-09-02; Phase 1 ready to begin |
+| **Status** | **APPROVED** — Phase 0 ❄️ FROZEN 2026-09-02; Phase 1 in progress (M1–M5 done, M4 frozen) |
 | **Owner** | Product owner |
 | **Authority** | **Canonical.** Derived from [`DECISIONS.md`](DECISIONS.md) Decision 39. |
 | **Dependencies** | D39 (phases) · D36 (stack) · D37 (auth) · D30 (gates) · D42 (principles) |
 | **Related documents** | [`TESTING-STRATEGY.md`](TESTING-STRATEGY.md) · [`FEATURE-INVENTORY.md`](FEATURE-INVENTORY.md) · [`IMPLEMENTATION-GAPS.md`](IMPLEMENTATION-GAPS.md) |
-| **Last updated** | 2026-09-02 — D43 resolved `OQ-B06`; Phase 0 frozen |
+| **Last updated** | 2026-09-03 — Phase 1 status corrected: M3 and M4 complete (M4 frozen), M5 routing complete |
 | **Change history** | 2026-08-30 created as `DRAFT / BLOCKED` recording that no phase plan existed · 2026-09-02 renamed from `IMPLEMENTATION-ROADMAP.md` · **2026-09-02 rewritten as APPROVED from Decision 39, resolving `OD-29`/`OQ-B03`, blocking since the project began** · **2026-09-02 Phase 0 FROZEN following Decision 43 (`OQ-B06` resolved); Phase 1 gate wired to `TESTING-STRATEGY.md` §4** |
 
 ---
@@ -32,7 +32,7 @@ REGRESSION TEST → PHASE FREEZE → NEXT PHASE
 | Phase | Goal | Status |
 |---|---|---|
 | **0** | Documentation & governance | ❄️ **FROZEN 2026-09-02** |
-| **1** | V2 foundation — auth, profile, PostgreSQL | **NEXT — ready to begin** |
+| **1** | V2 foundation — auth, profile, PostgreSQL | **IN PROGRESS** — M1–M5 done; M6–M7 remain |
 | **2** | Dating core | Not started |
 | **3** | Realtime communication | Not started |
 | **4** | Trust, safety & verification | Not started |
@@ -73,17 +73,19 @@ REGRESSION TEST → PHASE FREEZE → NEXT PHASE
 
 ## Phase 1 — V2 Foundation
 
-**Status: IN PROGRESS.** M1 ✅ · M2 ✅ · M3 ⏸ blocked on PostgreSQL · M4–M7 not started.
+**Status: IN PROGRESS.** M1 ✅ · M2 ✅ · M3 ✅ · M4 ✅ frozen · M5 ✅ · M6–M7 not started.
 
 | Milestone | State |
 |---|---|
 | M1 — Audit + package manager | ✅ **Done** (D44) — npm authoritative, `IG-62` closed |
 | M2 — Vitest · Playwright · CI · static verification | ✅ **Done** (D43) — 4/4 tests, typecheck 0, lint 0, build passes with types enforced |
-| M3 — Prisma/PostgreSQL | ⏸ **Blocked** — Option A cleanup done (D45); **PostgreSQL unavailable in the environment** |
-| M4 — Authentication/session | Not started |
-| M5 — Signup/login/logout/protected routes | Not started |
-| M6 — Profile/photos/preferences | Not started |
+| M3 — Prisma/PostgreSQL | ✅ **Done** — PostgreSQL 16.15; migration `20260902143350_phase1_foundation`; the six foundation tables with foreign keys on every relation |
+| M4 — Authentication/session | ✅ **Done and frozen** 2026-09-03, tag `phase1-m4-frozen` — D37 cookie sessions; `IG-01`, `IG-02`, `IG-63`, `IG-65`, `IG-66`, `IG-70`, `IG-74` closed; CI green on Linux + PostgreSQL 16 |
+| M5 — Signup/login/logout/protected routes | ✅ **Done** 2026-09-03 — see the note below |
+| M6 — Profile/photos/preferences | Not started — owns `/api/profile`, which onboarding needs before it can complete |
 | M7 — Full Phase 1 gate | Not started |
+
+> **Note on the M4/M5 boundary.** This table's M5 row — signup, login, logout and protected API routes — was delivered inside M4, whose completion gate required exactly those four things. Rather than leave M5 empty, the product owner scoped it on 2026-09-03 to the other half of this phase's `Frontend` requirement below: **real routing and Server Components**, replacing the single-page client shell. Both readings of the row are now satisfied.
 
 **Goal.** A secure, tested foundation: PostgreSQL, cookie-session auth, profile creation. **Everything else depends on this being right.**
 
@@ -96,6 +98,8 @@ REGRESSION TEST → PHASE FREEZE → NEXT PHASE
 **API.** `AUTHENTICATION.md` §4 flows; `API-SPECIFICATION.md` §4 endpoints. Response and error envelope established.
 
 **Frontend.** Server Components by default. Real routing — retire the single-page tab shell. Auth screens, onboarding, profile editor.
+
+> ✅ **Delivered in M5** (2026-09-03). Routes: `/` (landing), `/login`, `/signup`, `/onboarding`, `/profile`, with `(auth)` and `(app)` route groups carrying server-side session guards. The session is resolved by `getCurrentSession()` before render, so an unauthenticated request is redirected without protected markup ever reaching the browser. `src/app/page.tsx` is no longer a Client Component.
 
 **Security.** Every item in `SECURITY-GUIDELINES.md` §14.
 
