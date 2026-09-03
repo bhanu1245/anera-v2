@@ -42,6 +42,16 @@ Onboarding and the profile editor collect a date of birth rather than a number. 
 
 Field limits are the ones `R-10` already records, tagged `OQ-B07`. `gender` and `intent` are validated structurally only: checking them against the existing option lists would ratify `OQ-B07`/`OQ-P01` by implementation, and `OQ-P01` specifically asks whether the non-dating intents survive. `maxDistanceKm` is refused rather than stored — inert until `OQ-B05`.
 
+### Milestone 6 frozen — 2026-09-03
+
+Frozen at the tag `phase1-m6-frozen`. CI run [`33786722439`](https://github.com/bhanu1245/anera-v2/actions/runs/33786722439) is green across all three jobs. Local gate: typecheck 0, lint 0, production build 0, Vitest 128/128, Playwright 26/26.
+
+Coverage of the M6 server code: profile route 95.6%, preferences route 94.4%, profile validation 83.8%, preferences validation 95.7%, age derivation 96.2%. Overall statement coverage rose from 15.5% at the M4 freeze to 41.6% — the no-regression ratchet moves up, with no threshold imposed (`TESTING-STRATEGY.md` §5.1).
+
+**M6 is frozen with photos undelivered.** That is not a partial pass being waved through: the photo work was blocked by an unmade decision, the insecure surface was removed rather than shipped, and gate test #18 is recorded as unmet. **Phase 1 still cannot freeze** until `IG-18` is decided and photos are built.
+
+The M4 and M5 freeze tags and the legacy preservation snapshot are unmodified.
+
 ---
 
 ## 2026-09-03 — Phase 1 Milestone 5: real routing
