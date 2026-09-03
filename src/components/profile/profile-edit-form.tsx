@@ -31,15 +31,29 @@ import { cn } from '@/lib/utils';
 // output types diverge, which breaks the react-hook-form resolver generic.
 // Defaults are supplied by `defaultValues` below instead.
 const profileSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(50, 'Name too long'),
-  age: z.number().min(18, 'Must be at least 18').max(120, 'Invalid age'),
+  displayName: z.string().min(1, 'Name is required').max(50, 'Name too long'),
+  // A calendar date, not an age. BACKEND-SCHEMA.md §2.1: a stored age "is
+  // wrong the day after it's written". The server derives the age and enforces
+  // the 18 floor itself — this check only spares the user a round trip.
+  birthDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter your date of birth')
+    .refine((value) => {
+      const d = new Date(`${value}T00:00:00Z`);
+      if (Number.isNaN(d.getTime())) return false;
+      const now = new Date();
+      let age = now.getUTCFullYear() - d.getUTCFullYear();
+      const m = now.getUTCMonth() - d.getUTCMonth();
+      if (m < 0 || (m === 0 && now.getUTCDate() < d.getUTCDate())) age -= 1;
+      return age >= 18 && age <= 120;
+    }, 'You must be at least 18'),
   gender: z.enum(['male', 'female', 'non-binary', 'other'], {
     error: 'Gender is required',
   }),
   bio: z.string().max(500, 'Bio too long (max 500 chars)'),
   interests: z.array(z.string()).max(10, 'Maximum 10 interests'),
   city: z.string().max(100, 'City name too long'),
-  relationshipIntent: z.enum(['casual', 'serious', 'networking', 'friendship', 'not-sure', '']),
+  intent: z.enum(['casual', 'serious', 'networking', 'friendship', 'not-sure', '']),
 });
 
 type FormValues = z.infer<typeof profileSchema>;
@@ -57,13 +71,13 @@ export function ProfileEditForm({ userId }: ProfileEditFormProps) {
   const form = useForm<FormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      name: profile?.name || '',
-      age: profile?.age || 25,
+      displayName: profile?.displayName || '',
+      birthDate: profile?.birthDate || '',
       gender: (profile?.gender as Gender) || 'male',
       bio: profile?.bio || '',
       interests: profile?.interests || [],
       city: profile?.city || '',
-      relationshipIntent: (profile?.relationshipIntent as RelationshipIntent) || '',
+      intent: (profile?.intent as RelationshipIntent) || '',
     },
     mode: 'onChange',
   });
@@ -72,13 +86,13 @@ export function ProfileEditForm({ userId }: ProfileEditFormProps) {
   useEffect(() => {
     if (profile) {
       form.reset({
-        name: profile.name || '',
-        age: profile.age || 25,
+        displayName: profile.displayName || '',
+        birthDate: profile.birthDate || '',
         gender: (profile.gender as Gender) || 'male',
         bio: profile.bio || '',
         interests: profile.interests || [],
         city: profile.city || '',
-        relationshipIntent: (profile.relationshipIntent as RelationshipIntent) || '',
+        intent: (profile.intent as RelationshipIntent) || '',
       });
     }
   }, [profile, form]);
@@ -112,20 +126,27 @@ export function ProfileEditForm({ userId }: ProfileEditFormProps) {
       optimisticUpdateProfile(data as Partial<ProfileFormData>);
 
       try {
+        // PATCH, per API-SPECIFICATION.md §4. The MVP used PUT, which the
+        // specification does not list.
         const res = await apiFetch('/api/profile', {
-          method: 'PUT',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          // ✅ No userId in body — session provides it
+          // No userId in the body — the session provides it, and the endpoint
+          // has no parameter that could name anyone else.
           body: JSON.stringify(data),
         });
 
         if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'Failed to update profile');
+          // API-SPECIFICATION.md §2: { error: { code, message, details } }.
+          const errData = await res.json().catch(() => null);
+          const fieldMessage = errData?.error?.details?.[0]?.message;
+          throw new Error(
+            fieldMessage || errData?.error?.message || 'Failed to update profile',
+          );
         }
 
         const responseData = await res.json();
-        setProfile(responseData.profile);
+        setProfile(responseData.data.profile);
 
         toast({
           title: 'Profile updated',
@@ -182,7 +203,7 @@ export function ProfileEditForm({ userId }: ProfileEditFormProps) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FormField
               control={form.control}
-              name="name"
+              name="displayName"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Name</FormLabel>
@@ -196,19 +217,14 @@ export function ProfileEditForm({ userId }: ProfileEditFormProps) {
 
             <FormField
               control={form.control}
-              name="age"
+              name="birthDate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Age</FormLabel>
+                  <FormLabel>Date of birth</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      min={18}
-                      max={120}
-                      placeholder="Your age"
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 18)}
-                    />
+                    {/* Age is derived from this and never submitted
+                        (BACKEND-SCHEMA.md §2.1). */}
+                    <Input type="date" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -311,7 +327,7 @@ export function ProfileEditForm({ userId }: ProfileEditFormProps) {
 
           <FormField
             control={form.control}
-            name="relationshipIntent"
+            name="intent"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>What are you looking for?</FormLabel>

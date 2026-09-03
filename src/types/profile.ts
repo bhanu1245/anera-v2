@@ -1,5 +1,17 @@
-// Profile types for the Anera dating app
+// Profile types for the Anera dating app.
+//
+// Updated in M6 to the V2 shape defined by BACKEND-SCHEMA.md §2. The MVP
+// fields this replaces are recorded in §2.1: `name` became `displayName`,
+// `relationshipIntent` became `intent`, and the stored `age` integer became
+// `birthDate` — because a stored age "is wrong the day after it's written".
+// Age now arrives derived from the server and is never sent back.
 
+/**
+ * The gender and intent value sets are UNRATIFIED (`OQ-B07`, and `OQ-P01`,
+ * which asks whether the non-dating intents survive). The server validates
+ * both structurally and does not police the value set. These types describe
+ * what the current UI offers, not an approved vocabulary.
+ */
 export type Gender = "male" | "female" | "non-binary" | "other";
 export type RelationshipIntent = "casual" | "serious" | "networking" | "friendship" | "not-sure";
 
@@ -12,35 +24,35 @@ export interface ProfilePhoto {
 
 export interface Profile {
   id: string;
-  userId: string;
-  name: string;
+  displayName: string;
+  /** Calendar date, `YYYY-MM-DD`. */
+  birthDate: string;
+  /** Derived server-side from `birthDate`; never stored, never submitted. */
   age: number;
-  gender: Gender;
+  gender: string;
   bio: string;
   interests: string[];
   city: string;
-  relationshipIntent: RelationshipIntent;
+  intent: string;
   isOnboarded: boolean;
+  /**
+   * Always empty in M6. Photo upload was removed pending a media-storage
+   * decision (`IG-18`); the field remains because the `photos` table does.
+   */
   photos: ProfilePhoto[];
   createdAt: string;
   updatedAt: string;
 }
 
+/** What the profile form submits. `age` is absent by design — it is derived. */
 export interface ProfileFormData {
-  name: string;
-  age: number;
-  gender: Gender;
+  displayName: string;
+  birthDate: string;
+  gender: string;
   bio: string;
   interests: string[];
   city: string;
-  relationshipIntent: RelationshipIntent;
-}
-
-export interface PhotoUploadResult {
-  id: string;
-  url: string;
-  order: number;
-  isPrimary: boolean;
+  intent: string;
 }
 
 // Image validation constants

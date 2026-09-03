@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ProfileEditForm } from './profile-edit-form';
+import Link from 'next/link';
+import { ROUTES } from '@/lib/routes';
 import { useProfileStore } from '@/stores/profile-store';
-import { useToast } from '@/hooks/use-toast';
-import { apiFetch } from '@/lib/api-client';
 
 /**
  * Anera V2 — profile editor.
@@ -38,18 +38,17 @@ interface ProfileEditorProps {
 
 export function ProfileEditor({ userId }: ProfileEditorProps) {
   const { profile, isLoading, error, fetchProfile } = useProfileStore();
-  const { toast } = useToast();
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     if (userId && !initialized) {
-      fetchProfile(userId).then(() => setInitialized(true));
+      fetchProfile().then(() => setInitialized(true));
     }
-  }, [userId, initialized, fetchProfile]);
+  }, [initialized, fetchProfile]);
 
   const handleRetry = () => {
     setInitialized(false);
-    fetchProfile(userId).then(() => setInitialized(true));
+    fetchProfile().then(() => setInitialized(true));
   };
 
   // Loading state
@@ -83,7 +82,11 @@ export function ProfileEditor({ userId }: ProfileEditorProps) {
     );
   }
 
-  // No profile yet - show create option
+  // No profile. The (app) route guard sends a user without one to onboarding
+  // before this renders, so reaching here means the profile went away
+  // mid-session. Onboarding is where a profile is created — this used to POST
+  // a stub called "New User" with MVP field names, which would now be rejected
+  // and would in any case have skipped the flow that collects real answers.
   if (!profile) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -91,36 +94,10 @@ export function ProfileEditor({ userId }: ProfileEditorProps) {
           <CardContent className="pt-6 text-center space-y-4">
             <h2 className="text-lg font-semibold">No profile found</h2>
             <p className="text-sm text-muted-foreground">
-              Let&apos;s create your profile to get started!
+              Let&apos;s set up your profile to get started.
             </p>
-            <Button
-              onClick={async () => {
-                try {
-                  const res = await apiFetch('/api/profile', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      // ✅ No userId — session provides it
-                      name: 'New User',
-                      age: 25,
-                      gender: 'male',
-                    }),
-                  });
-                  if (!res.ok) throw new Error('Failed to create');
-                  await res.json();
-                  await fetchProfile(userId);
-                  toast({ title: 'Profile created!', description: 'Start editing your profile.' });
-                } catch {
-                  toast({
-                    title: 'Error',
-                    description: 'Failed to create profile.',
-                    variant: 'destructive',
-                  });
-                }
-              }}
-              className="gap-2"
-            >
-              Create Profile
+            <Button asChild className="gap-2">
+              <Link href={ROUTES.onboarding}>Set up your profile</Link>
             </Button>
           </CardContent>
         </Card>
@@ -132,7 +109,7 @@ export function ProfileEditor({ userId }: ProfileEditorProps) {
     <div className="w-full max-w-2xl mx-auto px-4 py-6 space-y-6">
       {/* Profile Header */}
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">{profile.name}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{profile.displayName}</h1>
         <p className="text-muted-foreground">
           {profile.age} • {profile.city || 'No city set'}
         </p>

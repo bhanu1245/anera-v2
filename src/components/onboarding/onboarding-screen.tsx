@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, Heart, Loader2 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
 import { useProfileStore } from '@/stores/profile-store';
+import { ROUTES } from '@/lib/routes';
 import { apiFetch } from '@/lib/api-client';
 import { AnimatedBackground } from '@/components/layout/animated-background';
 import { Button } from '@/components/ui/button';
@@ -13,17 +14,20 @@ import { Label } from '@/components/ui/label';
 /**
  * Anera V2 — onboarding (docs/02-APP-FLOW.md §2.6).
  *
- * RELOCATED UNCHANGED in M5. This is the single-page shell's OnboardingScreen
- * moved to its own route, byte-for-byte apart from the `export` keyword and
- * these imports. M5 is a routing change, not a UI change.
+ * Relocated to its own route in M5; wired to a real endpoint in M6. It now
+ * completes: `POST /api/profile` creates the profile and the server routes the
+ * user onward.
  *
- * KNOWN LIMITATION — not introduced here. `handleComplete` posts to
- * `/api/profile`, which does not exist: it was removed under Option A (D45)
- * and is rebuilt in Milestone 6 (ROADMAP.md Phase 1, "M6 — Profile/photos/
- * preferences"). Onboarding therefore cannot be completed yet. That was
- * already true of this screen inside the shell; M5 moves it, and deliberately
- * neither fixes it nor papers over it with a placeholder state, because both
- * would be M6 work.
+ * IDENTITY. This component holds no user id, and asks for none. It used to
+ * read one from the auth store — the M5 carry-forward issue — which broke on a
+ * hard reload and, worse, invited the client to think it knew who it was. The
+ * profile endpoint derives the owner from the session cookie and has no
+ * parameter that could name anyone else, so there is nothing here to pass,
+ * spoof, or get wrong (D37).
+ *
+ * Photo upload is absent from the flow: `APP-FLOW.md` §2.6 lists it as the
+ * third onboarding step, but the upload surface was removed in M6 pending a
+ * media-storage decision (`IG-18`). Onboarding is complete without it.
  */
 
 const AVAILABLE_INTERESTS = [
@@ -35,18 +39,18 @@ const AVAILABLE_INTERESTS = [
 ];
 
 export function OnboardingScreen() {
-  const { user } = useAuthStore();
-  const userId = user?.id;
+  const router = useRouter();
   const { fetchProfile } = useProfileStore();
   const [step, setStep] = useState<'gender' | 'details' | 'interests'>('gender');
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    name: '',
-    age: 25,
+    displayName: '',
+    birthDate: '',
     gender: '' as string,
     bio: '',
     city: '',
-    relationshipIntent: '',
+    intent: '',
     interests: [] as string[],
   });
 
@@ -62,26 +66,45 @@ export function OnboardingScreen() {
   }, []);
 
   const handleComplete = useCallback(async () => {
-    if (!userId) return;
     setIsSaving(true);
+    setError(null);
     try {
-      const res = await apiFetch('/api/profile', {
+      let res = await apiFetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      if (!res.ok && res.status === 409) {
-        await apiFetch('/api/profile', {
-          method: 'PUT',
+
+      // A profile already exists — the user reached onboarding twice, perhaps
+      // in two tabs. Update it rather than failing. PATCH, per
+      // API-SPECIFICATION.md §4; the MVP used PUT, which is not documented.
+      if (res.status === 409) {
+        res = await apiFetch('/api/profile', {
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
         });
       }
-      await fetchProfile(userId);
+
+      if (!res.ok) {
+        // API-SPECIFICATION.md §2: { error: { code, message, details } }.
+        const body = await res.json().catch(() => null);
+        const fieldMessage = body?.error?.details?.[0]?.message;
+        setError(fieldMessage || body?.error?.message || 'Could not save your profile.');
+        return;
+      }
+
+      await fetchProfile();
+      // The server decides where an onboarded user belongs; refresh so the
+      // route guards re-run against the profile that now exists.
+      router.replace(ROUTES.profile);
+      router.refresh();
+    } catch {
+      setError('Unable to reach the server. Please try again.');
     } finally {
       setIsSaving(false);
     }
-  }, [userId, formData, fetchProfile]);
+  }, [formData, fetchProfile, router]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -136,7 +159,7 @@ export function OnboardingScreen() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (formData.name.trim() && formData.age >= 18) setStep('interests');
+                if (formData.displayName.trim() && formData.birthDate) setStep('interests');
               }}
               className="space-y-4"
             >
@@ -148,22 +171,24 @@ export function OnboardingScreen() {
                 <Label htmlFor="onboard-name">Name</Label>
                 <Input
                   id="onboard-name"
-                  value={formData.name}
-                  onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                  value={formData.displayName}
+                  onChange={(e) => setFormData((p) => ({ ...p, displayName: e.target.value }))}
                   className="h-11"
                   required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="onboard-age">Age</Label>
+                <Label htmlFor="onboard-birthdate">Date of birth</Label>
+                {/* A date, not an age. BACKEND-SCHEMA.md §2.1: a stored age
+                    "is wrong the day after it's written", so the server keeps
+                    the date and derives the age. The 18 floor is enforced
+                    server-side (APP-FLOW.md §2.6). */}
                 <Input
-                  id="onboard-age"
-                  type="number"
-                  min={18}
-                  max={120}
-                  value={formData.age}
-                  onChange={(e) => setFormData((p) => ({ ...p, age: parseInt(e.target.value, 10) || 18 }))}
+                  id="onboard-birthdate"
+                  type="date"
+                  value={formData.birthDate}
+                  onChange={(e) => setFormData((p) => ({ ...p, birthDate: e.target.value }))}
                   className="h-11"
                   required
                 />
@@ -190,7 +215,7 @@ export function OnboardingScreen() {
                 />
               </div>
 
-              <Button type="submit" className="w-full h-11" disabled={!formData.name.trim() || formData.age < 18}>
+              <Button type="submit" className="w-full h-11" disabled={!formData.displayName.trim() || !formData.birthDate}>
                 Continue
               </Button>
             </form>
@@ -223,6 +248,15 @@ export function OnboardingScreen() {
                   );
                 })}
               </div>
+
+              {error && (
+                <div
+                  className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2"
+                  role="alert"
+                >
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
 
               <Button
                 className="w-full h-11 gap-2"
