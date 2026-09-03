@@ -42,6 +42,12 @@ Eight new routing tests (`tests/e2e/routing.spec.ts`), including `TESTING-STRATE
 
 `ROADMAP.md`'s Phase 1 status was stale to the point of being false — it recorded M3 as blocked on an unavailable PostgreSQL and M4–M7 as not started. Corrected. `IG-77` was added during inspection, recording that the auth forms use client `fetch` while `API-SPECIFICATION.md` §2 marks Server Actions as `SELECTED`; the frozen M4 route handlers were kept, per the product owner.
 
+### Milestone 5 frozen — 2026-09-03
+
+Frozen at the tag `phase1-m5-frozen`. CI run [`33749330990`](https://github.com/bhanu1245/anera-v2/actions/runs/33749330990) is green across all three jobs. Local gate: typecheck 0, lint 0, production build 0, Vitest 77/77, Playwright 19/19, executable legacy-auth scan clean across all twelve prohibited patterns.
+
+The M4 freeze tag and the legacy preservation snapshot are unmodified.
+
 ---
 
 ## 2026-09-03 — Phase 1 Milestone 4: authentication replaced
