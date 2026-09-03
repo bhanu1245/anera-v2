@@ -36,7 +36,7 @@ Only two source-of-truth statements changed, both in `IMPLEMENTATION-GAPS.md`: t
 
 ### Milestone 4 frozen — 2026-09-03
 
-Frozen at commit `fd4e35e`, tagged `phase1-m4-frozen`. CI run [`33719629582`](https://github.com/bhanu1245/anera-v2/actions/runs/33719629582) is green across all three jobs — static checks, unit/integration/security tests against a `postgres:16` service container, and the Playwright end-to-end suite. The E2E and integration suites therefore pass on Linux as well as on the Windows development machine.
+Frozen at the tag `phase1-m4-frozen`. CI is green across all three jobs — static checks, unit/integration/security tests against a `postgres:16` service container, and the Playwright end-to-end suite — on both the last code commit, run [`33719629582`](https://github.com/bhanu1245/anera-v2/actions/runs/33719629582), and the freeze commit the tag points at, run [`33719994820`](https://github.com/bhanu1245/anera-v2/actions/runs/33719994820). The E2E and integration suites therefore pass on Linux as well as on the Windows development machine.
 
 The first CI run (`33718539851`) failed at `npm ci` because `actions/setup-node` supplied the npm bundled with Node 22, which resolves optional peer dependencies differently from the npm that wrote `package-lock.json`. CI now installs the version named in `package.json`'s `packageManager` field. No application code, test or requirement changed as a result.
 
