@@ -9,14 +9,23 @@ import { apiFetch, onUnauthorized } from '@/lib/api-client';
  *
  * THIS STORE IS NOT AN AUTHENTICATION AUTHORITY.
  *
- * It caches, for rendering only, what the server most recently reported.
- * Every protected operation is decided server-side against the session
- * cookie; nothing here can grant access. Mutating this store cannot
- * authenticate anyone.
+ * Narrowed in M5. It used to feed the single-page shell's rendering decisions
+ * — which screen to show, and a spinner while it asked the server who you
+ * were. Real routing moved all of that to the server: `getCurrentSession()`
+ * resolves the session before render and the route groups redirect (see
+ * `src/app/(auth)/layout.tsx` and `src/app/(app)/layout.tsx`). Nothing decides
+ * what to render from this store any more.
+ *
+ * What is left is form state — whether a submit is in flight and what the
+ * server said went wrong — plus the identity the server last reported, which
+ * onboarding still reads. Mutating any of it authenticates nobody: every
+ * protected endpoint re-validates the cookie server-side.
+ *
+ * Removed in M5 because nothing read them once the server did the routing:
+ * `isChecking` (spinner flag) and `needsOnboarding` (screen selector).
  *
  * Deliberately absent (D37 §2): no token storage, no `hasHydrated` gate,
- * no `authReady`, no `waitForAuth`, no retry loop. `isChecking` below is a
- * spinner flag — it gates a loading indicator, never a security decision.
+ * no `authReady`, no `waitForAuth`, no retry loop.
  */
 
 export interface AuthUser {
@@ -25,11 +34,8 @@ export interface AuthUser {
 }
 
 interface AuthState {
-  /** Last state reported by the server. `null` = not yet asked. */
+  /** Identity the server last reported. Never an authorization input. */
   user: AuthUser | null;
-  needsOnboarding: boolean;
-  /** UI-only: a session check is in flight. Never an authorization input. */
-  isChecking: boolean;
   /** UI-only: a login/register request is in flight. */
   isSubmitting: boolean;
   error: string | null;
@@ -45,12 +51,11 @@ interface SessionPayload {
   data: {
     authenticated: boolean;
     user?: AuthUser;
-    needsOnboarding?: boolean;
   };
 }
 
 interface CredentialPayload {
-  data: { user: AuthUser; needsOnboarding: boolean };
+  data: { user: AuthUser };
 }
 
 async function readError(res: Response, fallback: string): Promise<string> {
@@ -62,32 +67,31 @@ async function readError(res: Response, fallback: string): Promise<string> {
   }
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  needsOnboarding: false,
-  isChecking: true,
   isSubmitting: false,
   error: null,
 
   clearError: () => set({ error: null }),
 
-  /** Asks the server who we are. The server's answer is the only answer. */
+  /**
+   * Asks the server who we are. The server's answer is the only answer.
+   *
+   * No longer called on mount: the server resolves the session before render.
+   * It remains available for a client that needs the identity after a hard
+   * load — see the note in the M5 report about onboarding.
+   */
   checkSession: async () => {
-    set({ isChecking: true });
     try {
       const res = await apiFetch('/api/auth/session', { skipAuthRefresh: true });
       if (!res.ok) {
-        set({ user: null, needsOnboarding: false, isChecking: false });
+        set({ user: null });
         return;
       }
       const body = (await res.json()) as SessionPayload;
-      set({
-        user: body.data.authenticated ? (body.data.user ?? null) : null,
-        needsOnboarding: body.data.needsOnboarding ?? false,
-        isChecking: false,
-      });
+      set({ user: body.data.authenticated ? (body.data.user ?? null) : null });
     } catch {
-      set({ user: null, needsOnboarding: false, isChecking: false });
+      set({ user: null });
     }
   },
 
@@ -108,12 +112,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // The response carries no session material — the cookie is already set.
       const body = (await res.json()) as CredentialPayload;
-      set({
-        user: body.data.user,
-        needsOnboarding: body.data.needsOnboarding,
-        isSubmitting: false,
-        isChecking: false,
-      });
+      set({ user: body.data.user, isSubmitting: false });
       return true;
     } catch {
       set({ error: 'Unable to reach the server. Please try again.', isSubmitting: false });
@@ -137,12 +136,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       const body = (await res.json()) as CredentialPayload;
-      set({
-        user: body.data.user,
-        needsOnboarding: body.data.needsOnboarding,
-        isSubmitting: false,
-        isChecking: false,
-      });
+      set({ user: body.data.user, isSubmitting: false });
       return true;
     } catch {
       set({ error: 'Unable to reach the server. Please try again.', isSubmitting: false });
@@ -156,11 +150,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Even on failure the local view resets; the server session is
       // authoritative and any surviving session is caught on next request.
     });
-    set({ user: null, needsOnboarding: false, error: null, isChecking: false });
+    set({ user: null, error: null });
   },
 }));
 
 // A 401 anywhere means the server no longer recognises us — reflect that.
 onUnauthorized(() => {
-  useAuthStore.setState({ user: null, needsOnboarding: false, isChecking: false });
+  useAuthStore.setState({ user: null });
 });
