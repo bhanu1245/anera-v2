@@ -6,7 +6,7 @@
 | **Status** | **REFERENCE** — a register of verified findings. It approves nothing and requires nothing on its own. |
 | **Authority** | Derived from the repository audit in [`00-MASTER-SPECIFICATION.md`](00-MASTER-SPECIFICATION.md) (2026-08-30) and the approved decisions in [`DECISIONS.md`](DECISIONS.md) (2026-09-01). |
 | **Purpose** | The single register of every place where the current implementation conflicts with, or falls short of, an approved decision — or is otherwise technical debt. |
-| **Last updated** | 2026-09-03 — Phase 1 M6 profile/preferences (§9.8). `IG-78`, `IG-79`, `IG-80` added during M6 inspection; `IG-18` photo surface contained. |
+| **Last updated** | 2026-09-03 — Phase 1 M6 profile/preferences (§9.8). `IG-05` closed; `IG-18` photo surface contained (still blocked); `IG-78`, `IG-79`, `IG-80` added during M6 inspection. |
 | **Gaps recorded** | 76 |
 
 ---
@@ -90,7 +90,7 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | **IG-65** | Security | `SESSION_SECRET` falls back to the literal `'anera-dev-secret-change-in-production'`, committed to the repo and duplicated in the notification mini-service | Security posture: do not expose secrets or credentials | If the env var is unset in production, every session token is forgeable by anyone who reads the repository | CONFLICT | Remove the fallback; fail closed; secret management decision | D30, `OD-12` | ✅ `CLOSED — M4 (2026-09-03)` | `SEC-01`, `AUTH-01`, `RISK-02` |
 | **IG-33** | Verification | No identity, photo, phone or email verification of any kind | D34 identity verification, **progressive verification**, profile authenticity, photo authenticity | The entire verification capability is absent | IMPLEMENTATION GAP | Requires D34 parameters (levels, providers) before design | D34 | `OPEN — BLOCKED` | §22 audit |
 | **IG-21** | Testing / Delivery | Zero test files; no test script; no CI; `typescript.ignoreBuildErrors: true`; ~25 ESLint rules disabled including `react-hooks/exhaustive-deps` | D30 multi-layer testing, security gates; standing phase-gate requiring per-phase tests | The mandated per-phase verification has no mechanism | IMPLEMENTATION GAP | Choose tooling; establish CI; re-enable type/lint gates | D30, `OD-28` | `OPEN — BLOCKED` | §28 audit, `BL-06` |
-| **IG-05** | Privacy / Security | `GET /api/profile?userId=…` is **unauthenticated** and returns any user's full profile: name, age, gender, bio, city, photos | D28 privacy by design, data minimization | Enumerable personal data exposure | CONFLICT | Require authentication; decide what a non-match may see | D28 | `OPEN — AWAITING PHASE` | `SEC-05`, `RISK-09` |
+| **IG-05** | Privacy / Security | `GET /api/profile?userId=…` is **unauthenticated** and returns any user's full profile: name, age, gender, bio, city, photos | D28 privacy by design, data minimization | Enumerable personal data exposure | CONFLICT | Require authentication; decide what a non-match may see | D28 | ✅ `CLOSED — M6 (2026-09-03)` | `SEC-05`, `RISK-09` |
 
 ---
 
@@ -325,6 +325,21 @@ No storage architecture replaced it, deliberately: `TECH-STACK.md` §3 lists med
 **`IG-18` stays `OPEN — BLOCKED`.** The exposure is gone; the requirement is unmet. Photos return when the media decision is made. Gate test #18 (photo upload) is consequently **unmet** and Phase 1 cannot freeze without it.
 
 `IG-79` (photo route contract mismatches) is moot while the routes are absent, but stays open — it describes what must be got right when they return.
+
+#### Delivered
+
+| Gap | Status |
+|---|---|
+| `IG-05` | ✅ **CLOSED** — the unauthenticated, enumerable `GET /api/profile?userId=` is gone in both directions. The endpoint takes no parameters and answers only for the session holder, and `profile-store` no longer calls the old shape. There is no identifier to tamper with, so ownership is not a comparison that could be got wrong. **The separate question of what a non-owner may see is NOT resolved** — that is `OQ-API-01` / `IG-78`, and `GET /api/profiles/[id]` remains unimplemented |
+| `IG-16` | **Still open.** Preferences can now be read and written per user, which removes the *storage* obstacle it named. But the gap itself is about `GET /api/discover` returning everyone unfiltered — discovery behaviour, which is Phase 2 and does not exist yet. Nothing in M6 reads a preference |
+
+**Delivered:** `GET`/`POST`/`PATCH /api/profile`, `GET`/`PATCH /api/preferences`, profile interests, server-side validation with the 18 floor, onboarding wired end to end. Gate tests **#16, #17, #19, #20** now pass; **#18 (photo upload) does not**, and cannot until `IG-18` is decided.
+
+**The M5 carry-forward is resolved, and better than proposed.** The plan was to pass the user id from the server page into onboarding. It turned out none was needed: the endpoint derives the owner from the session and has no parameter that could name anyone else, so the component holds no user id and asks for none.
+
+**Unratified values preserved, not re-chosen.** Field limits are the ones `R-10` already records (name 50, bio 500, city 100, interests 10), tagged `OQ-B07`. `gender` and `intent` are validated structurally only — checking them against the existing option lists would ratify `OQ-B07`/`OQ-P01` by implementation, so a test asserts an unfamiliar value is *accepted*.
+
+**`maxDistanceKm` is refused, not stored.** The schema calls it inert until `OQ-B05`, and `city` is free text with no coordinates behind it, so a distance figure would have nothing to compare against.
 
 #### Tests re-pointed, not weakened
 

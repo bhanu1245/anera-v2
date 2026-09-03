@@ -12,6 +12,38 @@
 
 ---
 
+## 2026-09-03 — Phase 1 Milestone 6: profile, preferences, photo containment
+
+The profile flow works end to end for the first time. A new account can sign up, complete onboarding, and find its data still there afterwards.
+
+### Delivered
+
+`GET`/`POST`/`PATCH /api/profile` and `GET`/`PATCH /api/preferences`, both taking their owner from the session and offering no parameter that could name anyone else. Profile interests, server-side validation, and the 18 age floor on both create and update. Gate tests **#16, #17, #19, #20** pass.
+
+`IG-05` is closed. The unauthenticated, enumerable `GET /api/profile?userId=` — which returned any user's full profile to anyone who could guess an id — is gone from both the endpoint and the client store.
+
+### Two blockers, reported not worked around
+
+**Photos are not implemented.** `SECURITY-GUIDELINES.md` §9 is `LOCKED` and requires uploads stored outside the web root behind signed URLs, while `TECH-STACK.md` §3 lists media storage as `OPEN` with **no provider approved**. A locked requirement depending on an unmade decision cannot be satisfied by inventing one.
+
+**`GET /api/profiles/[id]` is not implemented.** `API-SPECIFICATION.md` §4 lists it as a Phase 1 endpoint, but `OQ-API-01` — what fields the public view contains — is unresolved and marked "needed for Phase 2", and `PRIVACY-GUIDELINES.md` §3 leaves the classification scheme itself `OPEN`. Recorded as `IG-78`.
+
+### Photo surface contained
+
+The existing upload path wrote to `public/uploads`, inside the web root, with no access control — `IG-18`, already `DEPRECATED`. It survived only because it was unreachable: no profile could be created, so the editor never rendered. M6 makes profile creation work, which would have made it reachable for the first time.
+
+On the product owner's instruction it was removed — three route handlers and the photo-manager client — **before** profile functionality became usable, and nothing replaced it. `IG-18` stays open: the exposure is gone, the requirement is unmet. **Gate test #18 (photo upload) is consequently unmet, and Phase 1 cannot freeze without it.**
+
+### Age is a date now
+
+Onboarding and the profile editor collect a date of birth rather than a number. An age cannot be converted into a birth date, so this had to change for the profile to persist at all — `BACKEND-SCHEMA.md` §2.1 keeps the date precisely because a stored age "is wrong the day after it's written".
+
+### Unratified values preserved, not re-chosen
+
+Field limits are the ones `R-10` already records, tagged `OQ-B07`. `gender` and `intent` are validated structurally only: checking them against the existing option lists would ratify `OQ-B07`/`OQ-P01` by implementation, and `OQ-P01` specifically asks whether the non-dating intents survive. `maxDistanceKm` is refused rather than stored — inert until `OQ-B05`.
+
+---
+
 ## 2026-09-03 — Phase 1 Milestone 5: real routing
 
 The single-page client shell was replaced with App Router routes and server-resolved sessions, delivering the `Frontend` half of Phase 1: *"Server Components by default. Real routing — retire the single-page tab shell."*
