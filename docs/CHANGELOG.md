@@ -34,6 +34,12 @@ Only two source-of-truth statements changed, both in `IMPLEMENTATION-GAPS.md`: t
 
 `OQ-AUTH-01` (session lifetime, sliding renewal) · `OQ-AUTH-02` (password policy) · `OQ-AUTH-05` (CSRF synchroniser token) · `OQ-AUTH-06` (cookie name, `__Host-` prefix) · `OQ-C05` (rate-limit thresholds). All five are implemented with provisional values collected in `src/lib/auth/config.ts`, each tagged with its id. None is ratified.
 
+### Milestone 4 frozen — 2026-09-03
+
+Frozen at commit `fd4e35e`, tagged `phase1-m4-frozen`. CI run [`33719629582`](https://github.com/bhanu1245/anera-v2/actions/runs/33719629582) is green across all three jobs — static checks, unit/integration/security tests against a `postgres:16` service container, and the Playwright end-to-end suite. The E2E and integration suites therefore pass on Linux as well as on the Windows development machine.
+
+The first CI run (`33718539851`) failed at `npm ci` because `actions/setup-node` supplied the npm bundled with Node 22, which resolves optional peer dependencies differently from the npm that wrote `package-lock.json`. CI now installs the version named in `package.json`'s `packageManager` field. No application code, test or requirement changed as a result.
+
 ---
 
 ## 2026-09-02 — Phase 1 Milestones 1–3: D44, D45, Option A removal
