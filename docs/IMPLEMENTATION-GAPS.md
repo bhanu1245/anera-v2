@@ -6,7 +6,7 @@
 | **Status** | **REFERENCE** — a register of verified findings. It approves nothing and requires nothing on its own. |
 | **Authority** | Derived from the repository audit in [`00-MASTER-SPECIFICATION.md`](00-MASTER-SPECIFICATION.md) (2026-08-30) and the approved decisions in [`DECISIONS.md`](DECISIONS.md) (2026-09-01). |
 | **Purpose** | The single register of every place where the current implementation conflicts with, or falls short of, an approved decision — or is otherwise technical debt. |
-| **Last updated** | 2026-09-03 — Phase 1 M5 routing (§9.7). M4 closed `IG-01`, `IG-02`, `IG-63`, `IG-65`, `IG-66`, `IG-70`, `IG-74` (§9.6); `IG-77` added during M5 inspection. |
+| **Last updated** | 2026-09-03 — Phase 1 M6 profile/preferences (§9.8). `IG-78`, `IG-79`, `IG-80` added during M6 inspection; `IG-18` photo surface contained. |
 | **Gaps recorded** | 76 |
 
 ---
@@ -65,9 +65,9 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | UNRESOLVED | 1 |
 | **Total** | **76** |
 
-> Gap IDs are labels, not a contiguous sequence. The highest id in use is `IG-77`; some numbers in the range are unused.
+> Gap IDs are labels, not a contiguous sequence. The highest id in use is `IG-80`; some numbers in the range are unused.
 >
-> `IG-77` was found during M5 inspection on 2026-09-03 and is **not** part of the 2026-08-30 audit, so it is excluded from the counts above, which record that audit.
+> `IG-77` (M5 inspection) and `IG-78`, `IG-79`, `IG-80` (M6 inspection) were found on 2026-09-03 and are **not** part of the 2026-08-30 audit, so they are excluded from the counts above, which record that audit.
 
 **`IG-01` was the single blocking item** — the authentication conflict. Decisions 16–35 did **not** resolve it; **Decision 37** did, and Phase 1 Milestone 4 implemented it. Closed 2026-09-03 (§9.6).
 
@@ -176,6 +176,9 @@ Gap IDs (`IG-nn`) are new in this document. They map to the master specification
 | **IG-69** | Security | No security headers configured — no CSP, HSTS, X-Frame-Options, X-Content-Type-Options | Security posture; D30 security gates | Standard hardening absent | TECHNICAL DEBT | Header policy decision | D30 | `OPEN — AWAITING PHASE` | `SEC-11` |
 | **IG-71** | Authentication | No password reset, no email verification, no session listing or revocation UI | D34 progressive verification (email); standing security posture | Absent | IMPLEMENTATION GAP | Account recovery decisions | D34, `OD-08` | `OPEN — BLOCKED` | `AUTH-07` |
 | **IG-72** | Repository hygiene | `public/` contains a duplicated nested `public/public/` directory with `logo.svg` and `robots.txt` | — | Duplicated assets | TECHNICAL DEBT | Clean up | — | `OPEN — AWAITING PHASE` | `TI-11` |
+| **IG-78** | API / Privacy | `API-SPECIFICATION.md` §4 lists `GET /api/profiles/[id]` as a **Phase 1** endpoint returning "a limited public view" | Two authoritative documents must not disagree | `OPEN-QUESTIONS.md` **`OQ-API-01`** — "what fields are in the public profile view returned to another authenticated user?" — is **Unresolved** and annotated "needed for **Phase 2**". `PRIVACY-GUIDELINES.md` §3 compounds it: the data-classification scheme itself is `OPEN`, so no field can be classified public. The endpoint cannot be built without inventing the field list, which is `IG-05` in new clothing | CONFLICT | Resolve `OQ-API-01`, or move the endpoint to Phase 2 in `API-SPECIFICATION.md` | `OQ-API-01`, `IG-05`, `IG-38`, D28 | `OPEN — BLOCKED` | Found during M6 inspection, 2026-09-03 |
+| **IG-79** | API | Photo routes do not match their specification: implemented `PUT /api/profile/photos/reorder` and `PUT /api/profile/photos/primary` | `API-SPECIFICATION.md` §4 documents `PATCH /api/profile/photos/order`, and does not list a `primary` endpoint at all | Wrong path, wrong method, plus an undocumented endpoint | CONFLICT | Reconcile when photo work is unblocked — deferred out of M6 with the rest of photos, so the routes were removed rather than corrected (see §9.8) | `IG-18` | `OPEN — BLOCKED` | Found during M6 inspection, 2026-09-03 |
+| **IG-80** | API | The registration endpoint is implemented at `POST /api/auth/register` | `API-SPECIFICATION.md` §4 documents `POST /api/auth/signup` | The documented path does not exist; the implemented one is not documented | CONFLICT | Rename the route or amend the specification. **Not actionable inside M6** — the endpoint is part of the frozen M4 surface (`phase1-m4-frozen`) and its rename would touch frozen authentication | D37 | `OPEN — AWAITING PHASE` | Found during M6 inspection, 2026-09-03 |
 | **IG-77** | API / Architecture | The authentication forms submit with a client `fetch` to the `/api/auth/*` route handlers | [`API-SPECIFICATION.md`](API-SPECIFICATION.md) §2 marks **"Server Actions for form mutations"** as `SELECTED` | The implemented form-mutation style is not the selected one | TECHNICAL DEBT | Either adopt Server Actions for form mutations or record a decision superseding the `SELECTED` style. The route handlers themselves are frozen, tested and CI-verified (M4), so this is a question of what the *forms* call, not of the endpoints' correctness | D37 (auth transport, unaffected either way) | `OPEN — AWAITING PHASE` | Found during M5 inspection, 2026-09-03 |
 
 ---
