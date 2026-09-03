@@ -5,7 +5,7 @@ import { POST as registerRoute } from '@/app/api/auth/register/route';
 import { POST as loginRoute } from '@/app/api/auth/login/route';
 import { POST as logoutRoute } from '@/app/api/auth/logout/route';
 import { GET as sessionRoute } from '@/app/api/auth/session/route';
-import { PUT as setPrimaryPhotoRoute } from '@/app/api/profile/photos/primary/route';
+import { PATCH as updateProfileRoute } from '@/app/api/profile/route';
 import {
   SESSION_COOKIE_NAME,
   SESSION_TTL_MS,
@@ -392,11 +392,11 @@ describe('logout, revocation and expiry', () => {
     const { sessionId } = await registerUser();
     await revokeSession(sessionId);
 
-    const res = (await setPrimaryPhotoRoute(
-      makeRequest('/api/profile/photos/primary', {
-        method: 'PUT',
+    const res = (await updateProfileRoute(
+      makeRequest('/api/profile', {
+        method: 'PATCH',
         cookie: cookieHeader(sessionId),
-        body: { photoId: 'anything' },
+        body: { bio: 'anything' },
       }),
     )) as NextResponse;
 
@@ -409,8 +409,14 @@ describe('logout, revocation and expiry', () => {
 // ─────────────────────────────────────────────────────────────────────────
 
 describe('protected endpoints and isolation', () => {
-  /** Creates a profile with one photo for an existing user. */
-  async function seedPhoto(userId: string) {
+  /**
+   * Creates a profile for an existing user.
+   *
+   * M6 removed the photo routes this suite previously used as its protected
+   * fixture (SECURITY-GUIDELINES.md §9 / IG-18). The profile endpoint replaces
+   * them; the assertions below are unchanged.
+   */
+  async function seedProfile(userId: string) {
     const profile = await db.profile.create({
       data: {
         userId,
@@ -426,10 +432,10 @@ describe('protected endpoints and isolation', () => {
   }
 
   it('15. refuses a protected endpoint with no session', async () => {
-    const res = (await setPrimaryPhotoRoute(
-      makeRequest('/api/profile/photos/primary', {
-        method: 'PUT',
-        body: { photoId: 'anything' },
+    const res = (await updateProfileRoute(
+      makeRequest('/api/profile', {
+        method: 'PATCH',
+        body: { bio: 'anything' },
       }),
     )) as NextResponse;
 
@@ -439,19 +445,19 @@ describe('protected endpoints and isolation', () => {
 
   it('16. allows a protected endpoint with a valid session', async () => {
     const { userId, sessionId } = await registerUser();
-    const { photoId } = await seedPhoto(userId);
+    await seedProfile(userId);
 
-    const res = (await setPrimaryPhotoRoute(
-      makeRequest('/api/profile/photos/primary', {
-        method: 'PUT',
+    const res = (await updateProfileRoute(
+      makeRequest('/api/profile', {
+        method: 'PATCH',
         cookie: cookieHeader(sessionId),
-        body: { photoId },
+        body: { bio: 'Updated by the owner.' },
       }),
     )) as NextResponse;
 
     expect(res.status).toBe(200);
-    const updated = await db.photo.findUniqueOrThrow({ where: { id: photoId } });
-    expect(updated.isPrimary).toBe(true);
+    const updated = await db.profile.findUniqueOrThrow({ where: { userId } });
+    expect(updated.bio).toBe('Updated by the owner.');
   });
 
   it('19. isolates concurrent accounts — each session resolves only its own user', async () => {
@@ -484,7 +490,7 @@ describe('protected endpoints and isolation', () => {
   it('20a. requireOwnership distinguishes unauthenticated, not-the-owner and owner', async () => {
     const owner = await registerUser();
     const attacker = await registerUser();
-    const target = '/api/profile/photos/primary';
+    const target = '/api/profile';
 
     const anonymous = await requireOwnership(makeRequest(target), owner.userId);
     expect(anonymous).toBeInstanceOf(NextResponse);
@@ -506,22 +512,32 @@ describe('protected endpoints and isolation', () => {
     expect((rightUser as { userId: string }).userId).toBe(owner.userId);
   });
 
-  it("20. refuses to act on another account's resource, even with a valid session", async () => {
+  it("20. cannot act on another account's resource, even with a valid session", async () => {
     const owner = await registerUser();
     const attacker = await registerUser();
-    const { photoId } = await seedPhoto(owner.userId);
+    await seedProfile(owner.userId);
+    await seedProfile(attacker.userId);
 
-    const res = (await setPrimaryPhotoRoute(
-      makeRequest('/api/profile/photos/primary', {
-        method: 'PUT',
+    // The attacker names the owner as explicitly as the API allows.
+    const res = (await updateProfileRoute(
+      makeRequest('/api/profile', {
+        method: 'PATCH',
         cookie: cookieHeader(attacker.sessionId),
-        body: { photoId, userId: owner.userId }, // client-asserted id is ignored
+        body: { userId: owner.userId, bio: 'Hijacked.' },
       }),
     )) as NextResponse;
 
-    expect(res.status).toBe(403);
-    const unchanged = await db.photo.findUniqueOrThrow({ where: { id: photoId } });
-    expect(unchanged.isPrimary).toBe(false);
+    // The profile endpoint has no parameter that can address another user, so
+    // the claim is inert rather than refused: the write lands on the
+    // attacker's own row. The 403 branch — authenticated but not the owner —
+    // is asserted directly against `requireOwnership` in test 20a above, so
+    // that assertion is not lost, only relocated to the primitive that owns it.
+    expect(res.status).toBe(200);
+
+    const ownerRow = await db.profile.findUniqueOrThrow({ where: { userId: owner.userId } });
+    const attackerRow = await db.profile.findUniqueOrThrow({ where: { userId: attacker.userId } });
+    expect(ownerRow.bio).not.toBe('Hijacked.');
+    expect(attackerRow.bio).toBe('Hijacked.');
   });
 });
 
@@ -568,11 +584,11 @@ describe('transport boundaries', () => {
     const { sessionId } = await registerUser();
 
     // The exact value that authenticates in a cookie must fail in a header.
-    const viaHeader = (await setPrimaryPhotoRoute(
-      makeRequest('/api/profile/photos/primary', {
-        method: 'PUT',
+    const viaHeader = (await updateProfileRoute(
+      makeRequest('/api/profile', {
+        method: 'PATCH',
         headers: { authorization: `Bearer ${sessionId}` },
-        body: { photoId: 'anything' },
+        body: { bio: 'anything' },
       }),
     )) as NextResponse;
     expect(viaHeader.status).toBe(401);
@@ -606,11 +622,11 @@ describe('transport boundaries', () => {
 
       await sessionRoute(makeRequest('/api/auth/session', { cookie: cookieHeader(sessionId) }));
       // Deliberately trigger the protected route's error path too.
-      await setPrimaryPhotoRoute(
-        makeRequest('/api/profile/photos/primary', {
-          method: 'PUT',
+      await updateProfileRoute(
+        makeRequest('/api/profile', {
+          method: 'PATCH',
           cookie: cookieHeader(sessionId),
-          body: { photoId: 'does-not-exist' },
+          body: { displayName: '' },
         }),
       );
       await logoutRoute(

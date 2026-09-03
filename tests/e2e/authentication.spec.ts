@@ -275,11 +275,13 @@ test('an unauthenticated browser is refused by protected endpoints', async ({ pa
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
 
+  // M6 removed the photo routes this previously targeted (IG-18 containment);
+  // the profile endpoint replaces them. The assertion is unchanged.
   const status = await page.evaluate(async () => {
-    const res = await fetch('/api/profile/photos/primary', {
-      method: 'PUT',
+    const res = await fetch('/api/profile', {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ photoId: 'anything' }),
+      body: JSON.stringify({ bio: 'anything' }),
       credentials: 'include',
     });
     return res.status;

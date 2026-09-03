@@ -4,13 +4,33 @@ import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { ProfileEditForm } from './profile-edit-form';
-import { PhotoManager } from './photo-manager';
 import { useProfileStore } from '@/stores/profile-store';
 import { useToast } from '@/hooks/use-toast';
 import { apiFetch } from '@/lib/api-client';
+
+/**
+ * Anera V2 — profile editor.
+ *
+ * PHOTO MANAGEMENT IS DELIBERATELY ABSENT (M6, 2026-09-03).
+ *
+ * `SECURITY-GUIDELINES.md` §9 is `LOCKED` and requires uploads to be "stored
+ * outside the web root, served via signed URLs". The implementation that
+ * existed here wrote to `public/uploads` — inside the web root, world
+ * readable, no access control. That is `IG-18`, and it was already recorded
+ * as `DEPRECATED`.
+ *
+ * It survived only because it was unreachable: no profile could be created,
+ * so this editor could not be rendered. M6 makes profile creation work, which
+ * would have made that path reachable for the first time. So the upload
+ * routes and the photo manager were removed rather than carried forward.
+ *
+ * `TECH-STACK.md` §3 lists media storage as `OPEN` with no provider approved,
+ * so there is nothing to replace it with yet. Photos return when that
+ * decision is made; inventing a storage architecture here was explicitly out
+ * of scope.
+ */
 
 interface ProfileEditorProps {
   userId: string;
@@ -114,37 +134,16 @@ export function ProfileEditor({ userId }: ProfileEditorProps) {
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight">{profile.name}</h1>
         <p className="text-muted-foreground">
-          {profile.age} • {profile.city || 'No city set'} •{' '}
-          {profile.photos.length} photo{profile.photos.length !== 1 ? 's' : ''}
+          {profile.age} • {profile.city || 'No city set'}
         </p>
       </div>
 
       <Separator />
 
-      {/* Mobile: Tabs for Photos / Details | Desktop: Stacked layout */}
-      <div className="block lg:hidden">
-        <Tabs defaultValue="photos" className="w-full">
-          <TabsList className="w-full grid grid-cols-2">
-            <TabsTrigger value="photos">📸 Photos</TabsTrigger>
-            <TabsTrigger value="details">✏️ Details</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="photos" className="mt-4">
-            <PhotoManager userId={userId} />
-          </TabsContent>
-
-          <TabsContent value="details" className="mt-4">
-            <ProfileEditForm userId={userId} />
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      {/* Desktop: Stacked sections */}
-      <div className="hidden lg:block space-y-8">
-        <PhotoManager userId={userId} />
-        <Separator />
-        <ProfileEditForm userId={userId} />
-      </div>
+      {/* Photo management is absent by design — see the note at the top of
+          this file. The Photos/Details tabs went with it: a tab that renders
+          nothing is worse than no tab. */}
+      <ProfileEditForm userId={userId} />
     </div>
   );
 }

@@ -303,6 +303,37 @@ The single-page client shell was replaced with App Router routes and server-reso
 
 ---
 
+### 9.8 Milestone 6 — profile, preferences, and photo containment (2026-09-03)
+
+#### `IG-18` — insecure photo surface **CONTAINED** (not resolved)
+
+`SECURITY-GUIDELINES.md` §9 is `LOCKED`: uploads must be *"stored outside the web root, served via signed URLs"*. The implementation wrote to `public/uploads` — inside the web root, world-readable, no access control. That is `IG-18`, already recorded as `DEPRECATED`.
+
+It survived because it was **unreachable**: no profile could be created, so the profile editor could not render and the routes had no caller. M6 makes profile creation work, which would have made that path reachable for the first time — turning a dormant documented defect into a live one.
+
+**Removed** on the product owner's instruction, before profile functionality became usable:
+
+| Removed | Was |
+|---|---|
+| `src/app/api/profile/photos/route.ts` | `POST` (disk write) + `DELETE` |
+| `src/app/api/profile/photos/primary/route.ts` | `PUT` |
+| `src/app/api/profile/photos/reorder/route.ts` | `PUT` |
+| `src/components/profile/photo-manager.tsx` | the client that called them |
+
+No storage architecture replaced it, deliberately: `TECH-STACK.md` §3 lists media storage as `OPEN` with **no provider approved**, and choosing one was explicitly out of M6 scope. `public/uploads` did not exist and is gitignored, so no previously-uploaded file remains publicly addressable.
+
+**`IG-18` stays `OPEN — BLOCKED`.** The exposure is gone; the requirement is unmet. Photos return when the media decision is made. Gate test #18 (photo upload) is consequently **unmet** and Phase 1 cannot freeze without it.
+
+`IG-79` (photo route contract mismatches) is moot while the routes are absent, but stays open — it describes what must be got right when they return.
+
+#### Tests re-pointed, not weakened
+
+Six M4 tests used `PUT /api/profile/photos/primary` as their protected-endpoint fixture. They assert authentication and authorization boundaries, not photos, so they now target `PATCH /api/profile` with identical assertions.
+
+One changed shape and is called out here rather than buried: M4 test 20 asserted **403** when acting on another account's photo. The profile endpoint has no parameter that can address another user, so there is no 403 branch — the attacker's write lands on their own row and the victim's is untouched. The explicit 401/403/owner assertion still exists, directly against `requireOwnership`, in test 20a. Nothing was lost; the assertion moved to the primitive that owns it.
+
+---
+
 ## 11. Rules for handling this register
 
 1. **Do not fix anything here without an approved phase.** Opportunistic fixes violate the approved method.
