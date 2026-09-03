@@ -1,5 +1,6 @@
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { PrismaClient } from '@prisma/client';
+import { ROUTES } from '../../src/lib/routes';
 
 /**
  * Anera V2 — M4 authentication end-to-end tests.
@@ -63,8 +64,8 @@ function signInButton(page: Page) {
 /** Registers through the real UI and waits for the authenticated view. */
 async function registerThroughUi(page: Page, email: string): Promise<void> {
   await assignOwnClientAddress(page.context());
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Sign up' }).click();
+  // M5: signup is its own route rather than a view toggle inside one page.
+  await page.goto(ROUTES.signup);
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
 
